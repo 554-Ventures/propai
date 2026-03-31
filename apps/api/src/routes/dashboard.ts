@@ -20,7 +20,7 @@ router.get(
       },
       select: { unitId: true }
     });
-    const occupiedUnitsCount = new Set(activeLeases.map(l => l.unitId)).size;
+    const occupiedUnitsCount = new Set(activeLeases.map((l: any) => l.unitId)).size;
 
     const [propertiesCount, unitsCount, tenantsCount, totalIncome, outstandingRent, maintenanceCosts] =
       await Promise.all([
@@ -124,7 +124,7 @@ router.get(
     res.json({
       latePayments: {
         count: latePayments.length,
-        items: latePayments.map((payment) => ({
+        items: latePayments.map((payment: any) => ({
           id: payment.id,
           amount: payment.amount,
           dueDate: payment.dueDate,
@@ -138,7 +138,7 @@ router.get(
       },
       expiringLeases: {
         count: expiringLeases.length,
-        items: expiringLeases.map((lease) => ({
+        items: expiringLeases.map((lease: any) => ({
           id: lease.id,
           endDate: lease.endDate,
           rent: lease.rent,
@@ -149,7 +149,7 @@ router.get(
       },
       pendingMaintenance: {
         count: pendingMaintenance.length,
-        items: pendingMaintenance.map((request) => ({
+        items: pendingMaintenance.map((request: any) => ({
           id: request.id,
           title: request.title,
           status: request.status,

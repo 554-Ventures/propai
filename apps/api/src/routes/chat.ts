@@ -130,13 +130,13 @@ router.post(
       ...orderedMessages.map((msg) => ({ role: msg.role as "user" | "assistant", content: msg.content }))
     ];
 
-    let response = (await client.responses.create({
+    let response: any = await client.responses.create({
       model,
       input: input as any,
       tools: chatToolDefinitions as any,
       temperature: 0.2,
       user: userId
-    })) as Awaited<ReturnType<typeof client.responses.create>> & { output_text?: string; output?: unknown[]; id: string };
+    });
     let usageSnapshot = mergeUsage(emptyUsage(), extractUsage(response));
 
     const toolCallLogs: Array<{
@@ -213,13 +213,13 @@ router.post(
         }
       }
 
-      response = (await client.responses.create({
+      response = await client.responses.create({
         model,
         input: toolOutputs,
         previous_response_id: response.id,
         temperature: 0.2,
         user: userId
-      })) as typeof response;
+      });
       usageSnapshot = mergeUsage(usageSnapshot, extractUsage(response));
     }
 
@@ -355,7 +355,7 @@ router.get(
 
     res.json({
       sessionId: session.id,
-      messages: messages.map((message) => ({
+      messages: messages.map((message: any) => ({
         id: message.id,
         role: message.role,
         content: message.content,

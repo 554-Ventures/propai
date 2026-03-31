@@ -87,7 +87,7 @@ router.get(
       monthlyMap.set(key, { income: 0, expenses: 0 });
     }
 
-    payments.forEach((payment) => {
+    payments.forEach((payment: any) => {
       const date = payment.paidDate ?? payment.dueDate;
       if (!date) return;
       if (date < startMonth) return;
@@ -98,7 +98,7 @@ router.get(
       }
     });
 
-    expenses.forEach((expense) => {
+    expenses.forEach((expense: any) => {
       const key = monthKey(expense.date);
       const entry = monthlyMap.get(key);
       if (entry) {

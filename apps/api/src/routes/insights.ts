@@ -23,7 +23,7 @@ router.get(
     ]);
 
     const total = expenseInsights.length;
-    const accepted = expenseInsights.filter((insight) => !insight.overrideValue).length;
+    const accepted = expenseInsights.filter((insight: any) => !insight.overrideValue).length;
     const accuracy = total ? Number((accepted / total).toFixed(2)) : null;
 
     res.json({

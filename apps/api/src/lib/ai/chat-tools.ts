@@ -147,7 +147,7 @@ export const chatToolDefinitions = [
       },
       required: ["range"] as const
     },
-    strict: false
+    strict: false as const
   },
   {
     type: "function" as const,
@@ -160,14 +160,14 @@ export const chatToolDefinitions = [
         propertyName: { type: "string" as const, nullable: true }
       }
     },
-    strict: false
+    strict: false as const
   },
   {
     type: "function" as const,
     name: "listProperties",
     description: "List the user's properties.",
     parameters: { type: "object" as const, properties: {} },
-    strict: false
+    strict: false as const
   },
   {
     type: "function" as const,
@@ -197,7 +197,7 @@ export const chatToolDefinitions = [
       },
       required: ["range"] as const
     },
-    strict: false
+    strict: false as const
   },
   {
     type: "function" as const,
@@ -227,7 +227,7 @@ export const chatToolDefinitions = [
       },
       required: ["range"] as const
     },
-    strict: false
+    strict: false as const
   },
   {
     type: "function" as const,
@@ -242,7 +242,7 @@ export const chatToolDefinitions = [
       },
       required: ["query"] as const
     },
-    strict: false
+    strict: false as const
   }
 ];
 
@@ -299,7 +299,7 @@ export const executeChatTool = async (
         include: { property: true }
       });
 
-      const total = payments.reduce((sum, payment) => sum + payment.amount, 0);
+      const total = payments.reduce((sum: number, payment) => sum + payment.amount, 0);
       const byProperty = payments.reduce<Record<string, { propertyId: string; name: string; total: number }>>(
         (acc, payment) => {
           const key = payment.propertyId;
@@ -339,7 +339,7 @@ export const executeChatTool = async (
         include: { property: true }
       });
 
-      const total = payments.reduce((sum, payment) => sum + payment.amount, 0);
+      const total = payments.reduce((sum: number, payment) => sum + payment.amount, 0);
       const byProperty = payments.reduce<Record<string, { propertyId: string; name: string; total: number }>>(
         (acc, payment) => {
           const key = payment.propertyId;
@@ -379,7 +379,7 @@ export const executeChatTool = async (
         include: { property: true, vendor: true }
       });
 
-      const total = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+      const total = expenses.reduce((sum: number, expense) => sum + expense.amount, 0);
       const byCategory = expenses.reduce<Record<string, { category: string; total: number }>>(
         (acc, expense) => {
           const key = expense.category;

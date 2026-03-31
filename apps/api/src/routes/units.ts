@@ -34,7 +34,7 @@ router.get(
     });
 
     res.json(
-      units.map((unit) => ({
+      units.map((unit: any) => ({
         ...unit,
         currentLease: unit.leases[0] ?? null,
         leases: undefined
