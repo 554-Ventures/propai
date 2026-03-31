@@ -8,8 +8,28 @@ const testUser = {
   name: "Property User"
 };
 
+const cleanupUserData = async () => {
+  const user = await prisma.user.findUnique({ where: { email: testUser.email } });
+  if (!user) {
+    return;
+  }
+
+  const userId = user.id;
+  await prisma.aIInsight.deleteMany({ where: { userId } });
+  await prisma.expense.deleteMany({ where: { userId } });
+  await prisma.payment.deleteMany({ where: { userId } });
+  await prisma.document.deleteMany({ where: { userId } });
+  await prisma.maintenanceRequest.deleteMany({ where: { userId } });
+  await prisma.lease.deleteMany({ where: { userId } });
+  await prisma.unit.deleteMany({ where: { userId } });
+  await prisma.tenant.deleteMany({ where: { userId } });
+  await prisma.vendor.deleteMany({ where: { userId } });
+  await prisma.property.deleteMany({ where: { userId } });
+  await prisma.user.deleteMany({ where: { id: userId } });
+};
+
 const createUserAndToken = async () => {
-  await prisma.user.deleteMany({ where: { email: testUser.email } });
+  await cleanupUserData();
   await request(app).post("/auth/signup").send(testUser);
   const login = await request(app).post("/auth/login").send({
     email: testUser.email,
@@ -19,12 +39,11 @@ const createUserAndToken = async () => {
 };
 
 beforeAll(async () => {
-  await prisma.property.deleteMany({});
+  await cleanupUserData();
 });
 
 afterAll(async () => {
-  await prisma.property.deleteMany({ where: { user: { email: testUser.email } } });
-  await prisma.user.deleteMany({ where: { email: testUser.email } });
+  await cleanupUserData();
   await prisma.$disconnect();
 });
 
