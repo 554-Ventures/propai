@@ -18,7 +18,7 @@ export const logAiSecurityEvent = async (event: SecurityEventInput) => {
         type: event.type,
         severity: event.severity,
         message: event.message,
-        metadata: event.metadata ?? {}
+        metadata: (event.metadata ?? {}) as any
       }
     });
   } catch (error) {

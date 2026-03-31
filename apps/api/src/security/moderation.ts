@@ -20,8 +20,8 @@ export const moderateText = async (input: string): Promise<ModerationResult> => 
 
   return {
     flagged: Boolean(result?.flagged),
-    categories: (result?.categories ?? {}) as Record<string, boolean>,
-    categoryScores: (result?.category_scores ?? {}) as Record<string, number>,
+    categories: (result?.categories ?? {}) as unknown as Record<string, boolean>,
+    categoryScores: (result?.category_scores ?? {}) as unknown as Record<string, number>,
     model
   };
 };

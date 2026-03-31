@@ -120,123 +120,129 @@ const propertyFilters = (propertyId?: string | null) => (propertyId ? { property
 
 export const chatToolDefinitions = [
   {
-    type: "function",
+    type: "function" as const,
     name: "getRentCollected",
     description: "Get total rent collected within a date range, optionally scoped to a property.",
     parameters: {
-      type: "object",
+      type: "object" as const,
       properties: {
         range: {
           description:
             "Date range. Provide start/end ISO dates or a preset like last_month, month_to_date, year_to_date, last_30_days.",
           oneOf: [
             {
-              type: "object",
+              type: "object" as const,
               properties: {
-                start: { type: "string", description: "Start date (YYYY-MM-DD or ISO)" },
-                end: { type: "string", description: "End date (YYYY-MM-DD or ISO)" },
-                preset: { type: "string" }
+                start: { type: "string" as const, description: "Start date (YYYY-MM-DD or ISO)" },
+                end: { type: "string" as const, description: "End date (YYYY-MM-DD or ISO)" },
+                preset: { type: "string" as const }
               },
-              required: ["start", "end"]
+              required: ["start", "end"] as const
             },
-            { type: "string" }
+            { type: "string" as const }
           ]
         },
-        propertyId: { type: "string", nullable: true },
-        propertyName: { type: "string", nullable: true }
+        propertyId: { type: "string" as const, nullable: true },
+        propertyName: { type: "string" as const, nullable: true }
       },
-      required: ["range"]
-    }
+      required: ["range"] as const
+    },
+    strict: false
   },
   {
-    type: "function",
+    type: "function" as const,
     name: "getOutstandingRent",
     description: "Get outstanding (pending or late) rent totals, optionally scoped to a property.",
     parameters: {
-      type: "object",
+      type: "object" as const,
       properties: {
-        propertyId: { type: "string", nullable: true },
-        propertyName: { type: "string", nullable: true }
+        propertyId: { type: "string" as const, nullable: true },
+        propertyName: { type: "string" as const, nullable: true }
       }
-    }
+    },
+    strict: false
   },
   {
-    type: "function",
+    type: "function" as const,
     name: "listProperties",
     description: "List the user's properties.",
-    parameters: { type: "object", properties: {} }
+    parameters: { type: "object" as const, properties: {} },
+    strict: false
   },
   {
-    type: "function",
+    type: "function" as const,
     name: "getPropertyExpenses",
     description: "Get expenses within a date range, optionally scoped to a property.",
     parameters: {
-      type: "object",
+      type: "object" as const,
       properties: {
         range: {
           description:
             "Date range. Provide start/end ISO dates or a preset like last_month, month_to_date, year_to_date, last_30_days.",
           oneOf: [
             {
-              type: "object",
+              type: "object" as const,
               properties: {
-                start: { type: "string", description: "Start date (YYYY-MM-DD or ISO)" },
-                end: { type: "string", description: "End date (YYYY-MM-DD or ISO)" },
-                preset: { type: "string" }
+                start: { type: "string" as const, description: "Start date (YYYY-MM-DD or ISO)" },
+                end: { type: "string" as const, description: "End date (YYYY-MM-DD or ISO)" },
+                preset: { type: "string" as const }
               },
-              required: ["start", "end"]
+              required: ["start", "end"] as const
             },
-            { type: "string" }
+            { type: "string" as const }
           ]
         },
-        propertyId: { type: "string", nullable: true },
-        propertyName: { type: "string", nullable: true }
+        propertyId: { type: "string" as const, nullable: true },
+        propertyName: { type: "string" as const, nullable: true }
       },
-      required: ["range"]
-    }
+      required: ["range"] as const
+    },
+    strict: false
   },
   {
-    type: "function",
+    type: "function" as const,
     name: "getLeaseEnding",
     description: "Get leases ending within a date range, optionally scoped to a property.",
     parameters: {
-      type: "object",
+      type: "object" as const,
       properties: {
         range: {
           description:
             "Date range. Provide start/end ISO dates or a preset like last_month, month_to_date, year_to_date, last_30_days.",
           oneOf: [
             {
-              type: "object",
+              type: "object" as const,
               properties: {
-                start: { type: "string", description: "Start date (YYYY-MM-DD or ISO)" },
-                end: { type: "string", description: "End date (YYYY-MM-DD or ISO)" },
-                preset: { type: "string" }
+                start: { type: "string" as const, description: "Start date (YYYY-MM-DD or ISO)" },
+                end: { type: "string" as const, description: "End date (YYYY-MM-DD or ISO)" },
+                preset: { type: "string" as const }
               },
-              required: ["start", "end"]
+              required: ["start", "end"] as const
             },
-            { type: "string" }
+            { type: "string" as const }
           ]
         },
-        propertyId: { type: "string", nullable: true },
-        propertyName: { type: "string", nullable: true }
+        propertyId: { type: "string" as const, nullable: true },
+        propertyName: { type: "string" as const, nullable: true }
       },
-      required: ["range"]
-    }
+      required: ["range"] as const
+    },
+    strict: false
   },
   {
-    type: "function",
+    type: "function" as const,
     name: "findDocument",
     description: "Find documents by name or keywords, optionally scoped to a property.",
     parameters: {
-      type: "object",
+      type: "object" as const,
       properties: {
-        query: { type: "string", description: "Search query" },
-        propertyId: { type: "string", nullable: true },
-        propertyName: { type: "string", nullable: true }
+        query: { type: "string" as const, description: "Search query" },
+        propertyId: { type: "string" as const, nullable: true },
+        propertyName: { type: "string" as const, nullable: true }
       },
-      required: ["query"]
-    }
+      required: ["query"] as const
+    },
+    strict: false
   }
 ];
 

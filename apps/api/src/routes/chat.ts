@@ -130,13 +130,13 @@ router.post(
       ...orderedMessages.map((msg) => ({ role: msg.role as "user" | "assistant", content: msg.content }))
     ];
 
-    let response = await client.responses.create({
+    let response = (await client.responses.create({
       model,
-      input,
-      tools: chatToolDefinitions,
+      input: input as any,
+      tools: chatToolDefinitions as any,
       temperature: 0.2,
       user: userId
-    });
+    })) as Awaited<ReturnType<typeof client.responses.create>> & { output_text?: string; output?: unknown[]; id: string };
     let usageSnapshot = mergeUsage(emptyUsage(), extractUsage(response));
 
     const toolCallLogs: Array<{
@@ -213,13 +213,13 @@ router.post(
         }
       }
 
-      response = await client.responses.create({
+      response = (await client.responses.create({
         model,
         input: toolOutputs,
         previous_response_id: response.id,
         temperature: 0.2,
         user: userId
-      });
+      })) as typeof response;
       usageSnapshot = mergeUsage(usageSnapshot, extractUsage(response));
     }
 
@@ -277,8 +277,8 @@ router.post(
         role: "assistant",
         content: safeResponseText,
         metadata: {
-          toolCalls: toolCallLogs,
-          citations,
+          toolCalls: toolCallLogs as any,
+          citations: citations as any,
           outputBlockedReason: outputBlockedReason ?? null
         }
       }
@@ -289,8 +289,8 @@ router.post(
         data: toolCallLogs.map((log) => ({
           messageId: assistantMessage.id,
           toolName: log.toolName,
-          inputs: log.inputs,
-          outputs: log.outputs,
+          inputs: log.inputs as any,
+          outputs: log.outputs as any,
           status: log.status
         }))
       });
