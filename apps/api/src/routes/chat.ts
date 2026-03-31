@@ -2,11 +2,21 @@ import { Router } from "express";
 import prisma from "../lib/prisma";
 import { asyncHandler } from "../utils/async-handler";
 import { aiRateLimit } from "../middleware/ai-rate-limit";
+import { aiInputSanitizer } from "../middleware/ai-input-sanitizer";
+import { aiPromptGuard } from "../middleware/ai-prompt-guard";
+import { aiModeration } from "../middleware/ai-moderation";
+import { aiBudgetGuard } from "../middleware/ai-budget-guard";
 import { getOpenAIClient, getOpenAIModel } from "../lib/openai";
 import { chatToolDefinitions, executeChatTool } from "../lib/ai/chat-tools";
 import type { ResponseFunctionToolCall } from "openai/resources/responses/responses";
+import { filterAiOutput } from "../security/output-filter";
+import { moderateText } from "../security/moderation";
+import { calculateAiCostUsd, emptyUsage, mergeUsage } from "../security/costs";
+import { extractUsage } from "../security/usage";
+import { logAiSecurityEvent } from "../security/security-logger";
 
 const router = Router();
+const allowedToolNames = new Set(chatToolDefinitions.map((tool) => tool.name));
 
 const buildSystemPrompt = (propertyName?: string | null) => {
   const scopeLine = propertyName
@@ -34,6 +44,10 @@ const extractToolCalls = (response: { output?: unknown[] }): ResponseFunctionToo
 router.post(
   "/",
   aiRateLimit,
+  aiInputSanitizer,
+  aiPromptGuard,
+  aiModeration,
+  aiBudgetGuard,
   asyncHandler(async (req, res) => {
     const { message, sessionId, propertyId } = req.body as {
       message?: string;
@@ -41,7 +55,7 @@ router.post(
       propertyId?: string;
     };
 
-    const trimmedMessage = message?.trim();
+    const trimmedMessage = req.ai?.sanitizedMessage ?? message?.trim();
     if (!trimmedMessage) {
       res.status(400).json({ error: "Message is required" });
       return;
@@ -68,9 +82,15 @@ router.post(
         where: { id: sessionId, userId },
         include: { property: true }
       });
+      // If session not found (stale ID), create a new one instead of erroring
       if (!session) {
-        res.status(404).json({ error: "Chat session not found" });
-        return;
+        session = await prisma.chatSession.create({
+          data: {
+            userId,
+            propertyId: propertyId ?? null
+          },
+          include: { property: true }
+        });
       }
     } else {
       session = await prisma.chatSession.create({
@@ -117,6 +137,7 @@ router.post(
       temperature: 0.2,
       user: userId
     });
+    let usageSnapshot = mergeUsage(emptyUsage(), extractUsage(response));
 
     const toolCallLogs: Array<{
       toolName: string;
@@ -135,6 +156,23 @@ router.post(
       const toolOutputs = [] as Array<{ type: "function_call_output"; call_id: string; output: string }>;
 
       for (const toolCall of toolCalls) {
+        if (!allowedToolNames.has(toolCall.name)) {
+          await logAiSecurityEvent({
+            userId,
+            sessionId: session.id,
+            type: "tool_call_blocked",
+            severity: "high",
+            message: "Attempted to call unauthorized tool",
+            metadata: { toolName: toolCall.name }
+          });
+          toolOutputs.push({
+            type: "function_call_output",
+            call_id: toolCall.call_id,
+            output: JSON.stringify({ error: "Tool not permitted" })
+          });
+          continue;
+        }
+
         let parsedArgs: Record<string, unknown> = {};
         try {
           parsedArgs = toolCall.arguments ? JSON.parse(toolCall.arguments) : {};
@@ -182,18 +220,66 @@ router.post(
         temperature: 0.2,
         user: userId
       });
+      usageSnapshot = mergeUsage(usageSnapshot, extractUsage(response));
     }
 
     const responseText = response.output_text?.trim() || "Sorry, I could not generate a response.";
+    let safeResponseText = responseText;
+    let outputBlockedReason: string | null = null;
+
+    const outputFilter = filterAiOutput(responseText);
+    if (!outputFilter.allowed) {
+      outputBlockedReason = outputFilter.reason ?? "output_filter";
+    }
+
+    if (!outputBlockedReason && process.env.AI_OUTPUT_MODERATION_ENABLED !== "false") {
+      try {
+        const outputModeration = await moderateText(responseText);
+        if (outputModeration.flagged) {
+          outputBlockedReason = "output_moderation";
+          await logAiSecurityEvent({
+            userId,
+            sessionId: session.id,
+            type: "output_moderation_flag",
+            severity: "high",
+            message: "Assistant output flagged by moderation",
+            metadata: { categories: outputModeration.categories, model: outputModeration.model }
+          });
+        }
+      } catch (error) {
+        outputBlockedReason = "output_moderation_error";
+        await logAiSecurityEvent({
+          userId,
+          sessionId: session.id,
+          type: "output_moderation_error",
+          severity: "high",
+          message: "Output moderation service failed",
+          metadata: { error: error instanceof Error ? error.message : "unknown" }
+        });
+      }
+    }
+
+    if (outputBlockedReason) {
+      safeResponseText = "Sorry, I can't help with that request.";
+      await logAiSecurityEvent({
+        userId,
+        sessionId: session.id,
+        type: "output_blocked",
+        severity: "high",
+        message: "Assistant output blocked by safety filter",
+        metadata: { reason: outputBlockedReason }
+      });
+    }
 
     const assistantMessage = await prisma.chatMessage.create({
       data: {
         sessionId: session.id,
         role: "assistant",
-        content: responseText,
+        content: safeResponseText,
         metadata: {
           toolCalls: toolCallLogs,
-          citations
+          citations,
+          outputBlockedReason: outputBlockedReason ?? null
         }
       }
     });
@@ -215,9 +301,23 @@ router.post(
       data: { updatedAt: new Date() }
     });
 
+    const costUsd = calculateAiCostUsd(usageSnapshot);
+    await prisma.aiUsage.create({
+      data: {
+        userId,
+        sessionId: session.id,
+        messageId: assistantMessage.id,
+        model,
+        inputTokens: usageSnapshot.inputTokens,
+        outputTokens: usageSnapshot.outputTokens,
+        totalTokens: usageSnapshot.totalTokens,
+        costUsd: costUsd > 0 ? costUsd : null
+      }
+    });
+
     res.json({
       sessionId: session.id,
-      response: responseText,
+      response: safeResponseText,
       citations,
       toolCalls: toolCallLogs
     });

@@ -2,11 +2,14 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "./ui/button";
 import { useAuth } from "./auth-provider";
 
 export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const { login, signup } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -15,14 +18,18 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    console.log("[AuthForm] submit", { mode, email, hasPassword: !!password });
     setError(null);
     setLoading(true);
 
     try {
       if (mode === "login") {
         await login(email, password);
+        const returnUrl = searchParams.get('returnUrl') || '/dashboard';
+        router.push(returnUrl);
       } else {
         await signup(name, email, password);
+        router.push("/dashboard");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");

@@ -121,133 +121,121 @@ const propertyFilters = (propertyId?: string | null) => (propertyId ? { property
 export const chatToolDefinitions = [
   {
     type: "function",
-    function: {
-      name: "getRentCollected",
-      description: "Get total rent collected within a date range, optionally scoped to a property.",
-      parameters: {
-        type: "object",
-        properties: {
-          range: {
-            description:
-              "Date range. Provide start/end ISO dates or a preset like last_month, month_to_date, year_to_date, last_30_days.",
-            oneOf: [
-              {
-                type: "object",
-                properties: {
-                  start: { type: "string", description: "Start date (YYYY-MM-DD or ISO)" },
-                  end: { type: "string", description: "End date (YYYY-MM-DD or ISO)" },
-                  preset: { type: "string" }
-                },
-                required: ["start", "end"]
+    name: "getRentCollected",
+    description: "Get total rent collected within a date range, optionally scoped to a property.",
+    parameters: {
+      type: "object",
+      properties: {
+        range: {
+          description:
+            "Date range. Provide start/end ISO dates or a preset like last_month, month_to_date, year_to_date, last_30_days.",
+          oneOf: [
+            {
+              type: "object",
+              properties: {
+                start: { type: "string", description: "Start date (YYYY-MM-DD or ISO)" },
+                end: { type: "string", description: "End date (YYYY-MM-DD or ISO)" },
+                preset: { type: "string" }
               },
-              { type: "string" }
-            ]
-          },
-          propertyId: { type: "string", nullable: true },
-          propertyName: { type: "string", nullable: true }
+              required: ["start", "end"]
+            },
+            { type: "string" }
+          ]
         },
-        required: ["range"]
+        propertyId: { type: "string", nullable: true },
+        propertyName: { type: "string", nullable: true }
+      },
+      required: ["range"]
+    }
+  },
+  {
+    type: "function",
+    name: "getOutstandingRent",
+    description: "Get outstanding (pending or late) rent totals, optionally scoped to a property.",
+    parameters: {
+      type: "object",
+      properties: {
+        propertyId: { type: "string", nullable: true },
+        propertyName: { type: "string", nullable: true }
       }
     }
   },
   {
     type: "function",
-    function: {
-      name: "getOutstandingRent",
-      description: "Get outstanding (pending or late) rent totals, optionally scoped to a property.",
-      parameters: {
-        type: "object",
-        properties: {
-          propertyId: { type: "string", nullable: true },
-          propertyName: { type: "string", nullable: true }
-        }
-      }
-    }
+    name: "listProperties",
+    description: "List the user's properties.",
+    parameters: { type: "object", properties: {} }
   },
   {
     type: "function",
-    function: {
-      name: "listProperties",
-      description: "List the user's properties.",
-      parameters: { type: "object", properties: {} }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "getPropertyExpenses",
-      description: "Get expenses within a date range, optionally scoped to a property.",
-      parameters: {
-        type: "object",
-        properties: {
-          range: {
-            description:
-              "Date range. Provide start/end ISO dates or a preset like last_month, month_to_date, year_to_date, last_30_days.",
-            oneOf: [
-              {
-                type: "object",
-                properties: {
-                  start: { type: "string", description: "Start date (YYYY-MM-DD or ISO)" },
-                  end: { type: "string", description: "End date (YYYY-MM-DD or ISO)" },
-                  preset: { type: "string" }
-                },
-                required: ["start", "end"]
+    name: "getPropertyExpenses",
+    description: "Get expenses within a date range, optionally scoped to a property.",
+    parameters: {
+      type: "object",
+      properties: {
+        range: {
+          description:
+            "Date range. Provide start/end ISO dates or a preset like last_month, month_to_date, year_to_date, last_30_days.",
+          oneOf: [
+            {
+              type: "object",
+              properties: {
+                start: { type: "string", description: "Start date (YYYY-MM-DD or ISO)" },
+                end: { type: "string", description: "End date (YYYY-MM-DD or ISO)" },
+                preset: { type: "string" }
               },
-              { type: "string" }
-            ]
-          },
-          propertyId: { type: "string", nullable: true },
-          propertyName: { type: "string", nullable: true }
+              required: ["start", "end"]
+            },
+            { type: "string" }
+          ]
         },
-        required: ["range"]
-      }
+        propertyId: { type: "string", nullable: true },
+        propertyName: { type: "string", nullable: true }
+      },
+      required: ["range"]
     }
   },
   {
     type: "function",
-    function: {
-      name: "getLeaseEnding",
-      description: "Get leases ending within a date range, optionally scoped to a property.",
-      parameters: {
-        type: "object",
-        properties: {
-          range: {
-            description:
-              "Date range. Provide start/end ISO dates or a preset like last_month, month_to_date, year_to_date, last_30_days.",
-            oneOf: [
-              {
-                type: "object",
-                properties: {
-                  start: { type: "string", description: "Start date (YYYY-MM-DD or ISO)" },
-                  end: { type: "string", description: "End date (YYYY-MM-DD or ISO)" },
-                  preset: { type: "string" }
-                },
-                required: ["start", "end"]
+    name: "getLeaseEnding",
+    description: "Get leases ending within a date range, optionally scoped to a property.",
+    parameters: {
+      type: "object",
+      properties: {
+        range: {
+          description:
+            "Date range. Provide start/end ISO dates or a preset like last_month, month_to_date, year_to_date, last_30_days.",
+          oneOf: [
+            {
+              type: "object",
+              properties: {
+                start: { type: "string", description: "Start date (YYYY-MM-DD or ISO)" },
+                end: { type: "string", description: "End date (YYYY-MM-DD or ISO)" },
+                preset: { type: "string" }
               },
-              { type: "string" }
-            ]
-          },
-          propertyId: { type: "string", nullable: true },
-          propertyName: { type: "string", nullable: true }
+              required: ["start", "end"]
+            },
+            { type: "string" }
+          ]
         },
-        required: ["range"]
-      }
+        propertyId: { type: "string", nullable: true },
+        propertyName: { type: "string", nullable: true }
+      },
+      required: ["range"]
     }
   },
   {
     type: "function",
-    function: {
-      name: "findDocument",
-      description: "Find documents by name or keywords, optionally scoped to a property.",
-      parameters: {
-        type: "object",
-        properties: {
-          query: { type: "string", description: "Search query" },
-          propertyId: { type: "string", nullable: true },
-          propertyName: { type: "string", nullable: true }
-        },
-        required: ["query"]
-      }
+    name: "findDocument",
+    description: "Find documents by name or keywords, optionally scoped to a property.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search query" },
+        propertyId: { type: "string", nullable: true },
+        propertyName: { type: "string", nullable: true }
+      },
+      required: ["query"]
     }
   }
 ];

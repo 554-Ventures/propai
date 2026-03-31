@@ -204,14 +204,11 @@ router.patch(
         parsedEnd = null;
       } else if (body.endDate) {
         parsedEnd = parseDate(body.endDate);
+        if (parsedEnd === null) {
+          res.status(400).json({ error: "Invalid end date" });
+          return;
+        }
       }
-      if (parsedEnd === null && body.endDate) {
-        res.status(400).json({ error: "Invalid end date" });
-        return;
-      }
-    }
-      res.status(400).json({ error: "Invalid end date" });
-      return;
     }
 
     const nextStartDate = parsedStart ?? lease.startDate;
@@ -312,7 +309,3 @@ router.delete(
 );
 
 export default router;
-    if (body.status && !["DRAFT", "ACTIVE", "ENDED"].includes(body.status)) {
-      res.status(400).json({ error: "Invalid lease status" });
-      return;
-    }

@@ -2,8 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
-import { apiFetch } from "../../../../lib/api";
-import { Button } from "../../../../components/ui/button";
+import { apiFetch } from "@/lib/api";
+import { Button } from "@/components/ui/button";
 
 export default function NewTenantPage() {
   const router = useRouter();

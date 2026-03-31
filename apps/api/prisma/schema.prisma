@@ -55,6 +55,9 @@ model User {
   notifications Notification[]
   aiInsights   AIInsight[]
   chatSessions ChatSession[]
+  aiUsage      AiUsage[]
+  aiSecurityEvents AiSecurityEvent[]
+  aiBudget     AiBudget?
 }
 
 model Property {
@@ -283,4 +286,42 @@ model ToolCallLog {
   createdAt DateTime @default(now())
 
   message   ChatMessage @relation(fields: [messageId], references: [id])
+}
+
+model AiUsage {
+  id           String   @id @default(cuid())
+  userId       String
+  sessionId    String?
+  messageId    String?
+  model        String
+  inputTokens  Int
+  outputTokens Int
+  totalTokens  Int
+  costUsd      Float?
+  createdAt    DateTime @default(now())
+
+  user         User     @relation(fields: [userId], references: [id])
+}
+
+model AiSecurityEvent {
+  id        String   @id @default(cuid())
+  userId    String?
+  sessionId String?
+  type      String
+  severity  String
+  message   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user      User?    @relation(fields: [userId], references: [id])
+}
+
+model AiBudget {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  monthlyLimitUsd Float
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id])
 }

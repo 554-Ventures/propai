@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { apiFetch } from "../../../lib/api";
-import { Button } from "../../../components/ui/button";
+import { apiFetch } from "@/lib/api";
+import { Button } from "@/components/ui/button";
 
 type Property = {
   id: string;
@@ -17,15 +17,19 @@ type Property = {
 
 export default function PropertiesPage() {
   const [properties, setProperties] = useState<Property[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
+      setLoading(true);
       try {
         const data = await apiFetch<Property[]>("/properties", { auth: true });
         setProperties(data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load properties");
+        setError(err instanceof Error ? err.message : "We couldn't load your properties.");
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -47,6 +51,13 @@ export default function PropertiesPage() {
       {error && <p className="mt-4 text-sm text-rose-300">{error}</p>}
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
+        {loading &&
+          Array.from({ length: 2 }).map((_, index) => (
+            <div
+              key={`loading-${index}`}
+              className="h-28 animate-pulse rounded-2xl border border-slate-800/60 bg-slate-950/40"
+            />
+          ))}
         {properties.map((property) => (
           <Link
             key={property.id}
@@ -60,7 +71,7 @@ export default function PropertiesPage() {
           </Link>
         ))}
 
-        {properties.length === 0 && !error && (
+        {properties.length === 0 && !error && !loading && (
           <div className="rounded-2xl border border-dashed border-slate-700/70 p-6 text-sm text-slate-400">
             No properties yet. Add your first property to begin tracking units and tenants.
           </div>

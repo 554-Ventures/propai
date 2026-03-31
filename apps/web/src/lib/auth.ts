@@ -24,11 +24,13 @@ export const getStoredUser = (): AuthUser | null => {
 };
 
 export const setStoredAuth = (token: string, user: AuthUser) => {
+  if (typeof window === "undefined") return;
   window.localStorage.setItem(TOKEN_KEY, token);
   window.localStorage.setItem(USER_KEY, JSON.stringify(user));
 };
 
 export const clearStoredAuth = () => {
+  if (typeof window === "undefined") return;
   window.localStorage.removeItem(TOKEN_KEY);
   window.localStorage.removeItem(USER_KEY);
 };

@@ -30,6 +30,16 @@ curl -X POST http://localhost:4000/properties \
 
 # List properties
 curl -H 'Authorization: Bearer <TOKEN>' http://localhost:4000/properties
+
+# AI: Categorize expense
+curl -X POST http://localhost:4000/api/expenses/categorize \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <TOKEN>' \
+  -d '{"description":"Monthly power bill","amount":120,"vendor":"City Electric"}'
+
+# AI: Forecast cash flow
+curl -H 'Authorization: Bearer <TOKEN>' \
+  "http://localhost:4000/api/analytics/forecast?property_id=<PROPERTY_ID>&time_range=monthly"
 ```
 
 ## Frontend Smoke Test
@@ -44,3 +54,5 @@ pnpm -C apps/web dev
 - Sign up
 - Go to Properties → Add Property → Save
 - Confirm property appears in list
+- Go to Expenses → request AI suggestion → save expense
+- Go to Analytics → confirm forecast and insights render

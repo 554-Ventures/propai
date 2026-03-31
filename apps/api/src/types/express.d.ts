@@ -6,5 +6,14 @@ declare module "express-serve-static-core" {
       id: string;
       email: string;
     };
+    ai?: {
+      originalMessage?: string;
+      sanitizedMessage?: string;
+      promptInjectionMatches?: string[];
+      moderation?: {
+        flagged: boolean;
+        categories: Record<string, boolean>;
+      };
+    };
   }
 }

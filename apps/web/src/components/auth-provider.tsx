@@ -7,6 +7,7 @@ import { apiFetch } from "../lib/api";
 type AuthContextValue = {
   token: string | null;
   user: AuthUser | null;
+  loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -17,10 +18,13 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
     setToken(getStoredToken());
     setUser(getStoredUser());
+    setLoading(false);
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -49,11 +53,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     clearStoredAuth();
     setToken(null);
     setUser(null);
+    // Redirect to login page
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
   };
 
   const value = useMemo(
-    () => ({ token, user, login, signup, logout }),
-    [token, user]
+    () => ({ token, user, loading, login, signup, logout }),
+    [token, user, loading]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

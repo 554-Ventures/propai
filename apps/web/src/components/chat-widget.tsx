@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { apiFetch } from "../lib/api";
 import { Button } from "./ui/button";
 import { CHAT_OPEN_EVENT, CHAT_SEND_EVENT } from "../lib/chat-events";
@@ -216,7 +217,29 @@ export default function ChatWidget() {
                       : "bg-slate-900/70 text-slate-200"
                   }`}
                 >
-                  <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                  {msg.role === "assistant" ? (
+                    <div className="prose prose-sm prose-invert max-w-none">
+                      <ReactMarkdown
+                        components={{
+                          p: ({ children }) => <p className="leading-relaxed mb-2 last:mb-0">{children}</p>,
+                          ul: ({ children }) => <ul className="list-disc pl-4 mb-2">{children}</ul>,
+                          ol: ({ children }) => <ol className="list-decimal pl-4 mb-2">{children}</ol>,
+                          li: ({ children }) => <li className="mb-1">{children}</li>,
+                          code: ({ children }) => <code className="bg-slate-800/50 px-1 py-0.5 rounded text-cyan-300">{children}</code>,
+                          pre: ({ children }) => <pre className="bg-slate-950/80 p-3 rounded-lg overflow-x-auto mb-2">{children}</pre>,
+                          strong: ({ children }) => <strong className="font-semibold text-cyan-200">{children}</strong>,
+                          em: ({ children }) => <em className="italic text-slate-300">{children}</em>,
+                          h1: ({ children }) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
+                          h2: ({ children }) => <h2 className="text-base font-bold mb-2">{children}</h2>,
+                          h3: ({ children }) => <h3 className="text-sm font-bold mb-1">{children}</h3>,
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                  )}
                   <div className="mt-2 text-[11px] text-slate-400">{formatTime(msg.createdAt)}</div>
                   {msg.metadata?.toolCalls && msg.metadata.toolCalls.length > 0 && (
                     <div className="mt-2 rounded-xl border border-slate-800/70 bg-slate-950/80 px-3 py-2 text-[11px] text-slate-300">
