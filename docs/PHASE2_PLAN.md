@@ -15,7 +15,7 @@
 
 ### 2) Auth Scaffolding
 - **Decision: NextAuth** for web authentication (credentials flow to start)
-- Backend API uses bearer token auth (JWT) as a placeholder and will be aligned with NextAuth JWT session in Phase 2.1
+- Backend API uses bearer token auth (JWT) for now; align with NextAuth JWT session in Phase 2.1
 - Define user model, password hashing, and login/signup endpoints (if backend handles creds)
 - Add auth middleware for protected routes
 
@@ -65,4 +65,3 @@
 ## Risks / Dependencies
 - Auth choice integration between web and API
 - Prisma migration and Postgres availability
-
