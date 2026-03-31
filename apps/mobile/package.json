@@ -1,0 +1,11 @@
+{
+  "name": "@propai/mobile",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "echo 'mobile dev not initialized'",
+    "build": "echo 'mobile build not initialized'",
+    "lint": "echo 'mobile lint not initialized'",
+    "test": "echo 'mobile test not initialized'"
+  }
+}

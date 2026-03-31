@@ -1,0 +1,226 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LeaseStatus {
+  DRAFT
+  ACTIVE
+  ENDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  LATE
+  FAILED
+}
+
+enum MaintenanceStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum DocumentType {
+  LEASE
+  RECEIPT
+  INSPECTION
+  INSURANCE
+  TAX
+  OTHER
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  properties   Property[]
+  units        Unit[]
+  tenants      Tenant[]
+  leases       Lease[]
+  payments     Payment[]
+  maintenance  MaintenanceRequest[]
+  vendors      Vendor[]
+  expenses     Expense[]
+  documents    Document[]
+  notifications Notification[]
+}
+
+model Property {
+  id           String   @id @default(cuid())
+  userId       String
+  name         String
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  state        String
+  postalCode   String
+  country      String   @default("US")
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User     @relation(fields: [userId], references: [id])
+  units        Unit[]
+  leases       Lease[]
+  payments     Payment[]
+  maintenance  MaintenanceRequest[]
+  expenses     Expense[]
+  documents    Document[]
+}
+
+model Unit {
+  id         String   @id @default(cuid())
+  userId     String
+  propertyId String
+  label      String
+  bedrooms   Int?
+  bathrooms  Float?
+  squareFeet Int?
+  rent       Int?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user       User     @relation(fields: [userId], references: [id])
+  property   Property @relation(fields: [propertyId], references: [id])
+  leases     Lease[]
+  maintenance MaintenanceRequest[]
+}
+
+model Tenant {
+  id         String   @id @default(cuid())
+  userId     String
+  firstName  String
+  lastName   String
+  email      String?
+  phone      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user       User     @relation(fields: [userId], references: [id])
+  leases     Lease[]
+  maintenance MaintenanceRequest[]
+}
+
+model Lease {
+  id        String      @id @default(cuid())
+  userId    String
+  propertyId String
+  unitId    String
+  tenantId  String
+  startDate DateTime
+  endDate   DateTime?
+  rent      Int
+  status    LeaseStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id])
+  property  Property @relation(fields: [propertyId], references: [id])
+  unit      Unit     @relation(fields: [unitId], references: [id])
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  payments  Payment[]
+  documents Document[]
+}
+
+model Payment {
+  id        String        @id @default(cuid())
+  userId    String
+  propertyId String
+  leaseId   String
+  amount    Int
+  dueDate   DateTime
+  paidDate  DateTime?
+  status    PaymentStatus @default(PENDING)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id])
+  property  Property @relation(fields: [propertyId], references: [id])
+  lease     Lease    @relation(fields: [leaseId], references: [id])
+}
+
+model MaintenanceRequest {
+  id          String            @id @default(cuid())
+  userId      String
+  propertyId  String
+  unitId      String?
+  tenantId    String?
+  title       String
+  description String?
+  status      MaintenanceStatus @default(PENDING)
+  cost        Int?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id])
+  property Property @relation(fields: [propertyId], references: [id])
+  unit     Unit?    @relation(fields: [unitId], references: [id])
+  tenant   Tenant?  @relation(fields: [tenantId], references: [id])
+}
+
+model Vendor {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  email     String?
+  phone     String?
+  trade     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id])
+  expenses  Expense[]
+}
+
+model Expense {
+  id         String   @id @default(cuid())
+  userId     String
+  propertyId String
+  vendorId   String?
+  amount     Int
+  category   String
+  date       DateTime
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id])
+  property  Property @relation(fields: [propertyId], references: [id])
+  vendor    Vendor?  @relation(fields: [vendorId], references: [id])
+}
+
+model Document {
+  id         String       @id @default(cuid())
+  userId     String
+  propertyId String?
+  leaseId    String?
+  type       DocumentType
+  name       String
+  url        String
+  createdAt  DateTime     @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+  property  Property? @relation(fields: [propertyId], references: [id])
+  lease     Lease?    @relation(fields: [leaseId], references: [id])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  message   String
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+}
