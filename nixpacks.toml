@@ -2,10 +2,10 @@
 nixPkgs = ["nodejs-18_x", "pnpm"]
 
 [phases.install]
-cmds = ["pnpm install --frozen-lockfile"]
+cmds = ["pnpm install"]
 
 [phases.build]
-cmds = ["cd apps/api && pnpm build"]
+cmds = ["pnpm --filter @propai/api build"]
 
 [start]
 cmd = "cd apps/api && node dist/index.js"
