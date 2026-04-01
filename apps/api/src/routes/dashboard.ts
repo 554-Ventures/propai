@@ -2,7 +2,7 @@ import { Router } from "express";
 import prisma from "../lib/prisma";
 import { asyncHandler } from "../utils/async-handler";
 
-const router = Router();
+const router: Router = Router();
 
 router.get(
   "/metrics",
