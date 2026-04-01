@@ -3,7 +3,7 @@ import prisma from "../lib/prisma";
 import { asyncHandler } from "../utils/async-handler";
 import { aiRateLimit } from "../middleware/ai-rate-limit";
 
-const router = Router();
+const router: Router = Router();
 
 const monthKey = (date: Date) => {
   const year = date.getUTCFullYear();

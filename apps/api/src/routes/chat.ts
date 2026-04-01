@@ -15,7 +15,7 @@ import { calculateAiCostUsd, emptyUsage, mergeUsage } from "../security/costs";
 import { extractUsage } from "../security/usage";
 import { logAiSecurityEvent } from "../security/security-logger";
 
-const router = Router();
+const router: Router = Router();
 const allowedToolNames = new Set(chatToolDefinitions.map((tool) => tool.name));
 
 const buildSystemPrompt = (propertyName?: string | null) => {

@@ -4,7 +4,7 @@ import { asyncHandler } from "../utils/async-handler";
 import { aiRateLimit } from "../middleware/ai-rate-limit";
 import { categorizeExpense, expenseCategories } from "../lib/ai/expense-categorizer";
 
-const router = Router();
+const router: Router = Router();
 
 router.post(
   "/categorize",

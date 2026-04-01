@@ -5,7 +5,7 @@ import prisma from "../lib/prisma";
 import { asyncHandler } from "../utils/async-handler";
 import multer from "multer";
 
-const router = Router();
+const router: Router = Router();
 
 const uploadDir = process.env.UPLOAD_DIR ?? path.resolve(process.cwd(), "uploads");
 fs.mkdirSync(uploadDir, { recursive: true });

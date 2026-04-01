@@ -4,7 +4,7 @@ import prisma from "../lib/prisma";
 import { asyncHandler } from "../utils/async-handler";
 import { requireAuth, signToken } from "../middleware/auth";
 
-const router = Router();
+const router: Router = Router();
 
 router.post(
   "/signup",

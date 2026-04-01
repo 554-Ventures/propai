@@ -1,4 +1,4 @@
-import express from "express";
+import express, { type Express } from "express";
 import path from "path";
 import cors from "cors";
 import morgan from "morgan";
@@ -17,7 +17,7 @@ import leaseRoutes from "./routes/leases";
 import { requireAuth } from "./middleware/auth";
 import { errorHandler, notFound } from "./middleware/error";
 
-const app = express();
+const app: Express = express();
 
 const corsOrigin = process.env.CORS_ORIGIN ?? "http://localhost:3000";
 
