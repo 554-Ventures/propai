@@ -424,6 +424,7 @@ model ChatSession {
   messages ChatMessage[]
 
   @@index([organizationId])
+  @@index([organizationId, userId])
 }
 
 model ChatMessage {
@@ -434,8 +435,10 @@ model ChatMessage {
   metadata  Json?
   createdAt DateTime @default(now())
 
-  session   ChatSession @relation(fields: [sessionId], references: [id])
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   toolCalls ToolCallLog[]
+
+  @@index([sessionId, createdAt])
 }
 
 model ToolCallLog {
@@ -447,7 +450,7 @@ model ToolCallLog {
   status    String
   createdAt DateTime @default(now())
 
-  message   ChatMessage @relation(fields: [messageId], references: [id])
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 }
 
 model AiUsage {

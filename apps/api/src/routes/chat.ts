@@ -80,7 +80,7 @@ router.post(
     let session = null;
     if (sessionId) {
       session = await prisma.chatSession.findFirst({
-        where: { id: sessionId, organizationId },
+        where: { id: sessionId, organizationId, userId },
         include: { property: true }
       });
       // If session not found (stale ID), create a new one instead of erroring
@@ -336,16 +336,17 @@ router.get(
   aiRateLimit,
   asyncHandler(async (req, res) => {
     const userId = req.user?.id ?? "";
+    const organizationId = req.auth?.organizationId ?? "";
     const sessionId = req.query.sessionId as string | undefined;
 
     let session = null;
     if (sessionId) {
       session = await prisma.chatSession.findFirst({
-        where: { id: sessionId, organizationId: req.auth?.organizationId }
+        where: { id: sessionId, organizationId, userId }
       });
     } else {
       session = await prisma.chatSession.findFirst({
-        where: { organizationId: req.auth?.organizationId },
+        where: { organizationId, userId },
         orderBy: { updatedAt: "desc" }
       });
     }
@@ -370,6 +371,138 @@ router.get(
         createdAt: message.createdAt
       }))
     });
+  })
+);
+
+// Session management endpoints (private per user + org)
+router.get(
+  "/sessions",
+  asyncHandler(async (req, res) => {
+    const userId = req.user?.id ?? "";
+    const organizationId = req.auth?.organizationId ?? "";
+
+    const sessions = await prisma.chatSession.findMany({
+      where: { userId, organizationId },
+      orderBy: { updatedAt: "desc" },
+      include: {
+        property: { select: { id: true, name: true } }
+      }
+    });
+
+    res.json(
+      sessions.map((session) => ({
+        id: session.id,
+        propertyId: session.propertyId,
+        property: session.property,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt
+      }))
+    );
+  })
+);
+
+router.post(
+  "/sessions",
+  asyncHandler(async (req, res) => {
+    const userId = req.user?.id ?? "";
+    const organizationId = req.auth?.organizationId ?? "";
+    const { propertyId } = req.body as { propertyId?: string | null };
+
+    if (propertyId) {
+      const property = await prisma.property.findFirst({
+        where: { id: propertyId, organizationId },
+        select: { id: true }
+      });
+      if (!property) {
+        res.status(403).json({ error: "Property access denied" });
+        return;
+      }
+    }
+
+    const session = await prisma.chatSession.create({
+      data: {
+        userId,
+        organizationId,
+        propertyId: propertyId ?? null
+      },
+      include: { property: { select: { id: true, name: true } } }
+    });
+
+    res.status(201).json({
+      id: session.id,
+      propertyId: session.propertyId,
+      property: session.property,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt
+    });
+  })
+);
+
+router.post(
+  "/sessions/:id/clear",
+  asyncHandler(async (req, res) => {
+    const userId = req.user?.id ?? "";
+    const organizationId = req.auth?.organizationId ?? "";
+    const sessionId = req.params.id;
+
+    const session = await prisma.chatSession.findFirst({
+      where: { id: sessionId, userId, organizationId },
+      select: { id: true }
+    });
+    if (!session) {
+      res.status(404).json({ error: "Session not found" });
+      return;
+    }
+
+    // Delete tool call logs first (defensive; also covered by FK cascade in newer schema)
+    const messageIds = await prisma.chatMessage.findMany({
+      where: { sessionId },
+      select: { id: true }
+    });
+    const ids = messageIds.map((m) => m.id);
+    if (ids.length > 0) {
+      await prisma.toolCallLog.deleteMany({ where: { messageId: { in: ids } } });
+    }
+    await prisma.chatMessage.deleteMany({ where: { sessionId } });
+
+    await prisma.chatSession.update({
+      where: { id: sessionId },
+      data: { updatedAt: new Date() }
+    });
+
+    res.json({ ok: true });
+  })
+);
+
+router.delete(
+  "/sessions/:id",
+  asyncHandler(async (req, res) => {
+    const userId = req.user?.id ?? "";
+    const organizationId = req.auth?.organizationId ?? "";
+    const sessionId = req.params.id;
+
+    const session = await prisma.chatSession.findFirst({
+      where: { id: sessionId, userId, organizationId },
+      select: { id: true }
+    });
+    if (!session) {
+      res.status(404).json({ error: "Session not found" });
+      return;
+    }
+
+    // Delete children defensively (also covered by FK cascade in newer schema)
+    const messageIds = await prisma.chatMessage.findMany({
+      where: { sessionId },
+      select: { id: true }
+    });
+    const ids = messageIds.map((m) => m.id);
+    if (ids.length > 0) {
+      await prisma.toolCallLog.deleteMany({ where: { messageId: { in: ids } } });
+    }
+    await prisma.chatMessage.deleteMany({ where: { sessionId } });
+    await prisma.chatSession.delete({ where: { id: sessionId } });
+
+    res.json({ ok: true });
   })
 );
 

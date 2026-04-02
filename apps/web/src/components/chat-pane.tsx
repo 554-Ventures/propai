@@ -8,6 +8,13 @@ import { CHAT_SEND_EVENT } from "../lib/chat-events";
 
 const STORAGE_KEY = "propai_chat_session_id";
 
+type ChatSessionSummary = {
+  id: string;
+  title?: string | null;
+  lastMessage?: string | null;
+  updatedAt?: string | null;
+};
+
 type ToolCallLog = {
   toolName: string;
   status: string;
@@ -115,6 +122,10 @@ export default function ChatPane() {
   const [error, setError] = useState<string | null>(null);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [confirmingPlanId, setConfirmingPlanId] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
+  const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -125,37 +136,64 @@ export default function ChatPane() {
     return hasVerb && hasNoun;
   }, []);
 
-  const sessionId = useMemo(() => {
+  const storedSessionId = useMemo(() => {
     if (typeof window === "undefined") return null;
     return localStorage.getItem(STORAGE_KEY);
-  }, [historyLoaded]);
+  }, []);
 
-  useEffect(() => {
-    if (historyLoaded) return;
-
-    const loadHistory = async () => {
+  const loadSession = useCallback(
+    async (sessionId: string | null) => {
       try {
+        setError(null);
+        setLoading(true);
         const query = sessionId ? `?sessionId=${sessionId}` : "";
         const data = await apiFetch<ChatHistoryResponse>(`/api/chat/history${query}`, { auth: true });
-        if (data.sessionId) {
-          localStorage.setItem(STORAGE_KEY, data.sessionId);
+        const resolved = data.sessionId ?? sessionId;
+        if (resolved) {
+          localStorage.setItem(STORAGE_KEY, resolved);
         }
+        setActiveSessionId(resolved ?? null);
         setMessages(data.messages ?? []);
         setHistoryLoaded(true);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load history");
+      } finally {
+        setLoading(false);
       }
-    };
+    },
+    [setMessages]
+  );
 
-    void loadHistory();
-  }, [historyLoaded, sessionId]);
+  const refreshSessions = useCallback(async () => {
+    try {
+      setSessionsLoading(true);
+      const data = await apiFetch<{ sessions: ChatSessionSummary[] } | ChatSessionSummary[]>("/api/chat/sessions", {
+        auth: true
+      });
+      const list = Array.isArray(data) ? data : data.sessions;
+      setSessions(list ?? []);
+    } catch {
+      // Non-fatal: history still works.
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (historyLoaded) return;
+
+    void loadSession(storedSessionId);
+    void refreshSessions();
+  }, [historyLoaded, loadSession, refreshSessions, storedSessionId]);
 
   useEffect(() => {
     if (!bottomRef.current) return;
     bottomRef.current.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  const sendMessage = useCallback(async (text: string) => {
+  const sendMessage = useCallback(
+    async (text: string) => {
+      if (loading) return;
     const trimmed = text.trim();
     if (!trimmed) return;
 
@@ -248,6 +286,7 @@ export default function ChatPane() {
 
         if (data.sessionId) {
           localStorage.setItem(STORAGE_KEY, data.sessionId);
+          setActiveSessionId(data.sessionId);
         }
 
         const assistantMessage: ChatMessage = {
@@ -262,13 +301,83 @@ export default function ChatPane() {
         };
 
         setMessages((prev) => [...prev, assistantMessage]);
+        void refreshSessions();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send message");
     } finally {
       setLoading(false);
     }
-  }, [isWriteIntent]);
+    },
+    [isWriteIntent, loading, messages, refreshSessions]
+  );
+
+  const startNewChat = useCallback(async () => {
+    if (loading) return;
+    setError(null);
+    setLoading(true);
+    const previousSession = activeSessionId;
+    const previousMessages = messages;
+    setMessages([]);
+    setActiveSessionId(null);
+    try {
+      const data = await apiFetch<{ sessionId: string }>("/api/chat/sessions", {
+        method: "POST",
+        auth: true
+      });
+      localStorage.setItem(STORAGE_KEY, data.sessionId);
+      setActiveSessionId(data.sessionId);
+      setSessionsOpen(false);
+      void refreshSessions();
+    } catch (err) {
+      // Roll back.
+      setActiveSessionId(previousSession);
+      setMessages(previousMessages);
+      setError(err instanceof Error ? err.message : "Failed to start a new chat");
+    } finally {
+      setLoading(false);
+    }
+  }, [activeSessionId, loading, messages, refreshSessions]);
+
+  const clearChat = useCallback(async () => {
+    if (loading) return;
+    const sessionId = activeSessionId ?? localStorage.getItem(STORAGE_KEY);
+    if (!sessionId) {
+      setMessages([]);
+      return;
+    }
+    if (typeof window !== "undefined") {
+      const ok = window.confirm("Clear this chat? This removes messages from this session.");
+      if (!ok) return;
+    }
+
+    setError(null);
+    setLoading(true);
+    const previousMessages = messages;
+    setMessages([]);
+
+    try {
+      await apiFetch<{ ok: true }>(`/api/chat/sessions/${sessionId}/clear`, {
+        method: "POST",
+        auth: true
+      });
+      void refreshSessions();
+    } catch (err) {
+      setMessages(previousMessages);
+      setError(err instanceof Error ? err.message : "Failed to clear chat");
+    } finally {
+      setLoading(false);
+    }
+  }, [activeSessionId, loading, messages, refreshSessions]);
+
+  const switchSession = useCallback(
+    async (id: string) => {
+      if (loading) return;
+      setSessionsOpen(false);
+      await loadSession(id);
+    },
+    [loadSession, loading]
+  );
 
   const confirmDraft = useCallback(async (planId: string) => {
     setError(null);
@@ -356,17 +465,93 @@ export default function ChatPane() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex flex-wrap gap-2 border-b border-slate-900/80 px-4 py-2">
+      <div className="border-b border-slate-900/80 px-4 py-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setSessionsOpen((prev) => !prev);
+                if (!sessionsOpen) void refreshSessions();
+              }}
+              className="rounded-full border border-slate-800/80 bg-slate-900/60 px-3 py-1 text-xs text-slate-200 transition hover:border-cyan-400/70"
+              disabled={loading}
+              title="History"
+            >
+              History
+            </button>
+            {activeSessionId ? (
+              <span className="text-[11px] text-slate-500">Session {activeSessionId.slice(0, 6)}…</span>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={startNewChat} disabled={loading}>
+              New chat
+            </Button>
+            <Button variant="secondary" onClick={clearChat} disabled={loading || messages.length === 0}>
+              Clear chat
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-2 flex flex-wrap gap-2">
         {quickActions.map((action) => (
           <button
             key={action.label}
             onClick={() => sendMessage(action.message)}
             className="rounded-full border border-slate-800/80 bg-slate-900/60 px-3 py-1 text-xs text-slate-200 transition hover:border-cyan-400/70"
+            disabled={loading}
           >
             {action.label}
           </button>
         ))}
+        </div>
       </div>
+
+      {sessionsOpen && (
+        <div className="border-b border-slate-800/70 bg-slate-950/50 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Chats</p>
+            <button
+              className="text-xs text-slate-400 hover:text-slate-200"
+              onClick={() => setSessionsOpen(false)}
+            >
+              Close
+            </button>
+          </div>
+          <div className="mt-2 max-h-48 overflow-y-auto">
+            {sessionsLoading ? (
+              <p className="text-xs text-slate-400">Loading…</p>
+            ) : sessions.length === 0 ? (
+              <p className="text-xs text-slate-400">No saved chats yet.</p>
+            ) : (
+              <ul className="space-y-1">
+                {sessions.map((s) => {
+                  const isActive = (activeSessionId ?? localStorage.getItem(STORAGE_KEY)) === s.id;
+                  const title = (s.title ?? "Chat").trim() || "Chat";
+                  return (
+                    <li key={s.id}>
+                      <button
+                        onClick={() => void switchSession(s.id)}
+                        className={`w-full rounded-xl border px-3 py-2 text-left text-xs transition hover:border-cyan-400/60 ${
+                          isActive
+                            ? "border-cyan-400/60 bg-cyan-500/10 text-cyan-100"
+                            : "border-slate-800/70 bg-slate-900/40 text-slate-200"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-semibold text-slate-100">{title}</p>
+                          {s.updatedAt ? <span className="text-[10px] text-slate-500">{formatTime(s.updatedAt)}</span> : null}
+                        </div>
+                        {s.lastMessage ? <p className="mt-1 line-clamp-2 text-[11px] text-slate-400">{s.lastMessage}</p> : null}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
         {messages.map((msg) => (
