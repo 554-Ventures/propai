@@ -66,6 +66,17 @@ type AiPlanResponse =
     }
   | { mode: "chat"; message: string };
 
+type AiPlanAltResponse = {
+  pendingActionId: string;
+  requiresConfirm: boolean;
+  plan: {
+    kind?: string;
+    summary: string;
+    fields?: Record<string, unknown>;
+    toolCalls?: unknown[];
+  };
+};
+
 type AiConfirmResponse = {
   ok: true;
   result: {
@@ -159,20 +170,53 @@ export default function ChatWidget() {
 
     try {
       if (isWriteIntent(trimmed)) {
-        const data = await apiFetch<AiPlanResponse>("/ai/plan", {
+        const data = await apiFetch<AiPlanResponse | AiPlanAltResponse>("/ai/plan", {
           method: "POST",
           auth: true,
           body: JSON.stringify({ message: trimmed })
         });
 
-        if (data.mode === "draft") {
+        if ((data as any)?.plan && "requiresConfirm" in (data as any)) {
+          const d = data as AiPlanAltResponse;
+
+          if (!d.requiresConfirm || !d.pendingActionId) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `assistant-${Date.now()}`,
+                role: "assistant",
+                content: d.plan.summary ?? "",
+                createdAt: new Date().toISOString()
+              }
+            ]);
+            return;
+          }
+
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `assistant-draft-${Date.now()}`,
+              role: "assistant",
+              content: "",
+              createdAt: new Date().toISOString(),
+              metadata: {
+                aiDraft: {
+                  planId: d.pendingActionId,
+                  kind: d.plan.kind ?? "",
+                  summary: d.plan.summary,
+                  fields: d.plan.fields ?? {}
+                }
+              }
+            }
+          ]);
+        } else if ((data as any).mode === "draft") {
           const assistantMessage: ChatMessage = {
             id: `assistant-draft-${Date.now()}`,
             role: "assistant",
             content: "",
             createdAt: new Date().toISOString(),
             metadata: {
-              aiDraft: data.draft
+              aiDraft: (data as Extract<AiPlanResponse, { mode: "draft" }>).draft
             }
           };
           setMessages((prev) => [...prev, assistantMessage]);
@@ -180,7 +224,7 @@ export default function ChatWidget() {
           const assistantMessage: ChatMessage = {
             id: `assistant-${Date.now()}`,
             role: "assistant",
-            content: data.message,
+            content: (data as Extract<AiPlanResponse, { mode: "chat" }>).message,
             createdAt: new Date().toISOString()
           };
           setMessages((prev) => [...prev, assistantMessage]);

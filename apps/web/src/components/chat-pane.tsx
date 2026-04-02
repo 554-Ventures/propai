@@ -76,6 +76,17 @@ type AiPlanAltResponse = {
   };
 };
 
+type AiPlanAltClarifyResponse = {
+  pendingActionId: null;
+  requiresConfirm: false;
+  plan: {
+    summary: string;
+    toolCalls?: unknown[];
+    fields?: Record<string, unknown>;
+    kind?: string;
+  };
+};
+
 type AiConfirmResponse = {
   ok: true;
   result: {
@@ -162,15 +173,28 @@ export default function ChatPane() {
 
     try {
       if (isWriteIntent(trimmed)) {
-        const data = await apiFetch<AiPlanResponse | AiPlanAltResponse>("/ai/plan", {
+        const data = await apiFetch<AiPlanResponse | AiPlanAltResponse | AiPlanAltClarifyResponse>("/ai/plan", {
           method: "POST",
           auth: true,
           body: JSON.stringify({ message: trimmed })
         });
 
         // Newer server shape: { pendingActionId, plan, requiresConfirm }
-        if ((data as any)?.pendingActionId) {
-          const d = data as AiPlanAltResponse;
+        if ((data as any)?.plan && "requiresConfirm" in (data as any)) {
+          const d = data as AiPlanAltResponse | AiPlanAltClarifyResponse;
+
+          // Clarifying question / not ready to confirm yet.
+          if (!d.requiresConfirm || !d.pendingActionId) {
+            const assistantMessage: ChatMessage = {
+              id: `assistant-${Date.now()}`,
+              role: "assistant",
+              content: d.plan.summary ?? "",
+              createdAt: new Date().toISOString()
+            };
+            setMessages((prev) => [...prev, assistantMessage]);
+            return;
+          }
+
           const assistantMessage: ChatMessage = {
             id: `assistant-draft-${Date.now()}`,
             role: "assistant",
@@ -179,9 +203,9 @@ export default function ChatPane() {
             metadata: {
               aiDraft: {
                 planId: d.pendingActionId,
-                kind: d.plan.kind,
+                kind: (d.plan as any).kind ?? "",
                 summary: d.plan.summary,
-                fields: d.plan.fields
+                fields: (d.plan as any).fields ?? {}
               }
             }
           };
