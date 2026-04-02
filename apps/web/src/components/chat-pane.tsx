@@ -229,10 +229,20 @@ export default function ChatPane() {
           // Clarifying question / not ready to confirm yet.
           if (!d.requiresConfirm || !d.pendingActionId) {
             const assistantMessage: ChatMessage = {
-              id: `assistant-${Date.now()}`,
+              id: `assistant-clarify-${Date.now()}`,
               role: "assistant",
               content: d.plan.summary ?? "",
-              createdAt: new Date().toISOString()
+              createdAt: new Date().toISOString(),
+              metadata: d.pendingActionId
+                ? {
+                    aiDraft: {
+                      planId: d.pendingActionId,
+                      kind: (d.plan as any).kind ?? "",
+                      summary: d.plan.summary ?? "",
+                      fields: (d.plan as any).fields ?? {}
+                    }
+                  }
+                : null
             };
             setMessages((prev) => [...prev, assistantMessage]);
             return;
