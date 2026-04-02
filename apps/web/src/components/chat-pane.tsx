@@ -66,6 +66,16 @@ type AiPlanResponse =
     }
   | { mode: "chat"; message: string };
 
+type AiPlanAltResponse = {
+  pendingActionId: string;
+  requiresConfirm: boolean;
+  plan: {
+    kind: string;
+    summary: string;
+    fields: Record<string, unknown>;
+  };
+};
+
 type AiConfirmResponse = {
   ok: true;
   result: {
@@ -152,20 +162,38 @@ export default function ChatPane() {
 
     try {
       if (isWriteIntent(trimmed)) {
-        const data = await apiFetch<AiPlanResponse>("/ai/plan", {
+        const data = await apiFetch<AiPlanResponse | AiPlanAltResponse>("/ai/plan", {
           method: "POST",
           auth: true,
           body: JSON.stringify({ message: trimmed })
         });
 
-        if (data.mode === "draft") {
+        // Newer server shape: { pendingActionId, plan, requiresConfirm }
+        if ((data as any)?.pendingActionId) {
+          const d = data as AiPlanAltResponse;
           const assistantMessage: ChatMessage = {
             id: `assistant-draft-${Date.now()}`,
             role: "assistant",
             content: "",
             createdAt: new Date().toISOString(),
             metadata: {
-              aiDraft: data.draft
+              aiDraft: {
+                planId: d.pendingActionId,
+                kind: d.plan.kind,
+                summary: d.plan.summary,
+                fields: d.plan.fields
+              }
+            }
+          };
+          setMessages((prev) => [...prev, assistantMessage]);
+        } else if ((data as any).mode === "draft") {
+          const assistantMessage: ChatMessage = {
+            id: `assistant-draft-${Date.now()}`,
+            role: "assistant",
+            content: "",
+            createdAt: new Date().toISOString(),
+            metadata: {
+              aiDraft: (data as Extract<AiPlanResponse, { mode: "draft" }>).draft
             }
           };
           setMessages((prev) => [...prev, assistantMessage]);
@@ -173,7 +201,7 @@ export default function ChatPane() {
           const assistantMessage: ChatMessage = {
             id: `assistant-${Date.now()}`,
             role: "assistant",
-            content: data.message,
+            content: (data as Extract<AiPlanResponse, { mode: "chat" }>).message,
             createdAt: new Date().toISOString()
           };
           setMessages((prev) => [...prev, assistantMessage]);
