@@ -356,6 +356,7 @@ const actionToolDefinitions = [
     description: "Create a cashflow transaction (income or expense).",
     parameters: {
       type: "object" as const,
+      additionalProperties: false as const,
       properties: {
         type: { type: "string" as const, description: "income|expense" },
         amount: { type: "number" as const },
@@ -374,6 +375,7 @@ const actionToolDefinitions = [
     description: "Create a property.",
     parameters: {
       type: "object" as const,
+      additionalProperties: false as const,
       properties: {
         name: { type: "string" as const },
         addressLine1: { type: "string" as const },
@@ -394,6 +396,7 @@ const actionToolDefinitions = [
     description: "Create a tenant.",
     parameters: {
       type: "object" as const,
+      additionalProperties: false as const,
       properties: {
         firstName: { type: "string" as const },
         lastName: { type: "string" as const },
@@ -410,6 +413,7 @@ const actionToolDefinitions = [
     description: "Create a maintenance request.",
     parameters: {
       type: "object" as const,
+      additionalProperties: false as const,
       properties: {
         propertyId: { type: "string" as const },
         unitId: { type: "string" as const, nullable: true },
