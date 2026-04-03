@@ -130,19 +130,13 @@ export const chatToolDefinitions = [
         range: {
           description:
             "Date range. Provide start/end ISO dates or a preset like last_month, month_to_date, year_to_date, last_30_days.",
-          oneOf: [
-            {
-              type: "object" as const,
-              additionalProperties: false as const,
-              properties: {
-                start: { type: "string" as const, description: "Start date (YYYY-MM-DD or ISO)" },
-                end: { type: "string" as const, description: "End date (YYYY-MM-DD or ISO)" },
-                preset: { type: "string" as const }
-              },
-              required: ["start", "end"] as const
-            },
-            { type: "string" as const }
-          ]
+          type: "object" as const,
+          additionalProperties: false as const,
+          properties: {
+            start: { type: "string" as const, description: "Start date (YYYY-MM-DD or ISO)" },
+            end: { type: "string" as const, description: "End date (YYYY-MM-DD or ISO)" },
+            preset: { type: "string" as const, description: "Optional preset (last_month, month_to_date, year_to_date, last_30_days)" }
+          }
         },
         propertyId: { type: "string" as const, nullable: true },
         propertyName: { type: "string" as const, nullable: true }
@@ -183,19 +177,13 @@ export const chatToolDefinitions = [
         range: {
           description:
             "Date range. Provide start/end ISO dates or a preset like last_month, month_to_date, year_to_date, last_30_days.",
-          oneOf: [
-            {
-              type: "object" as const,
-              additionalProperties: false as const,
-              properties: {
-                start: { type: "string" as const, description: "Start date (YYYY-MM-DD or ISO)" },
-                end: { type: "string" as const, description: "End date (YYYY-MM-DD or ISO)" },
-                preset: { type: "string" as const }
-              },
-              required: ["start", "end"] as const
-            },
-            { type: "string" as const }
-          ]
+          type: "object" as const,
+          additionalProperties: false as const,
+          properties: {
+            start: { type: "string" as const, description: "Start date (YYYY-MM-DD or ISO)" },
+            end: { type: "string" as const, description: "End date (YYYY-MM-DD or ISO)" },
+            preset: { type: "string" as const, description: "Optional preset (last_month, month_to_date, year_to_date, last_30_days)" }
+          }
         },
         propertyId: { type: "string" as const, nullable: true },
         propertyName: { type: "string" as const, nullable: true }
@@ -215,19 +203,13 @@ export const chatToolDefinitions = [
         range: {
           description:
             "Date range. Provide start/end ISO dates or a preset like last_month, month_to_date, year_to_date, last_30_days.",
-          oneOf: [
-            {
-              type: "object" as const,
-              additionalProperties: false as const,
-              properties: {
-                start: { type: "string" as const, description: "Start date (YYYY-MM-DD or ISO)" },
-                end: { type: "string" as const, description: "End date (YYYY-MM-DD or ISO)" },
-                preset: { type: "string" as const }
-              },
-              required: ["start", "end"] as const
-            },
-            { type: "string" as const }
-          ]
+          type: "object" as const,
+          additionalProperties: false as const,
+          properties: {
+            start: { type: "string" as const, description: "Start date (YYYY-MM-DD or ISO)" },
+            end: { type: "string" as const, description: "End date (YYYY-MM-DD or ISO)" },
+            preset: { type: "string" as const, description: "Optional preset (last_month, month_to_date, year_to_date, last_30_days)" }
+          }
         },
         propertyId: { type: "string" as const, nullable: true },
         propertyName: { type: "string" as const, nullable: true }
