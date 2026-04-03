@@ -361,9 +361,7 @@ const actionToolDefinitions = [
         type: { type: "string" as const, description: "income|expense" },
         amount: { type: "number" as const },
         date: { type: "string" as const, description: "ISO date" },
-        category: { type: "string" as const },
-        propertyId: { type: "string" as const, nullable: true },
-        notes: { type: "string" as const, nullable: true }
+        category: { type: "string" as const }
       },
       required: ["type", "amount", "date", "category"] as const
     },
@@ -379,12 +377,9 @@ const actionToolDefinitions = [
       properties: {
         name: { type: "string" as const },
         addressLine1: { type: "string" as const },
-        addressLine2: { type: "string" as const, nullable: true },
         city: { type: "string" as const },
         state: { type: "string" as const },
-        postalCode: { type: "string" as const },
-        country: { type: "string" as const, nullable: true },
-        notes: { type: "string" as const, nullable: true }
+        postalCode: { type: "string" as const }
       },
       required: ["name", "addressLine1", "city", "state", "postalCode"] as const
     },
@@ -399,9 +394,7 @@ const actionToolDefinitions = [
       additionalProperties: false as const,
       properties: {
         firstName: { type: "string" as const },
-        lastName: { type: "string" as const },
-        email: { type: "string" as const, nullable: true },
-        phone: { type: "string" as const, nullable: true }
+        lastName: { type: "string" as const }
       },
       required: ["firstName", "lastName"] as const
     },
@@ -416,11 +409,7 @@ const actionToolDefinitions = [
       additionalProperties: false as const,
       properties: {
         propertyId: { type: "string" as const },
-        unitId: { type: "string" as const, nullable: true },
-        tenantId: { type: "string" as const, nullable: true },
-        title: { type: "string" as const },
-        description: { type: "string" as const, nullable: true },
-        cost: { type: "number" as const, nullable: true }
+        title: { type: "string" as const }
       },
       required: ["propertyId", "title"] as const
     },
