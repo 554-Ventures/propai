@@ -79,6 +79,21 @@ const propertyFilters = (propertyId?: string | null) => (propertyId ? { property
 export const chatToolDefinitions = [
   {
     type: "function" as const,
+    name: "resolveProperty",
+    description:
+      "Resolve a property from a user-provided name/address hint. Use this before running property-scoped analytics.",
+    parameters: {
+      type: "object" as const,
+      additionalProperties: false as const,
+      properties: {
+        query: { type: "string" as const, description: "Property name/address hint" }
+      },
+      required: ["query"] as const
+    },
+    strict: true as const
+  },
+  {
+    type: "function" as const,
     name: "getRentCollected",
     description: "Get total rent collected within a date range, optionally scoped to a property.",
     parameters: {
@@ -108,10 +123,7 @@ export const chatToolDefinitions = [
     parameters: {
       type: "object" as const,
       additionalProperties: false as const,
-      properties: {
-        propertyId: { type: "string" as const, nullable: true },
-        propertyName: { type: "string" as const, nullable: true }
-      }
+      properties: {}
     },
     strict: true as const
   },
@@ -179,8 +191,6 @@ export const chatToolDefinitions = [
       additionalProperties: false as const,
       properties: {
         query: { type: "string" as const, description: "Search query" },
-        propertyId: { type: "string" as const, nullable: true },
-        propertyName: { type: "string" as const, nullable: true }
       },
       required: ["query"] as const
     },
@@ -198,6 +208,37 @@ export type ToolExecutionResult = {
   citations?: Array<{ label: string; detail: string }>;
 };
 
+const resolvePropertyFromQuery = async (organizationId: string, query: string) => {
+  const q = query.trim();
+  if (!q) return null;
+
+  // Simple search by name/address fields.
+  const candidates = await prisma.property.findMany({
+    where: {
+      organizationId,
+      OR: [
+        { name: { contains: q, mode: "insensitive" } },
+        { addressLine1: { contains: q, mode: "insensitive" } },
+        { city: { contains: q, mode: "insensitive" } },
+        { postalCode: { contains: q, mode: "insensitive" } }
+      ]
+    },
+    orderBy: { createdAt: "asc" },
+    take: 5,
+    select: {
+      id: true,
+      name: true,
+      addressLine1: true,
+      city: true,
+      state: true,
+      postalCode: true
+    }
+  });
+
+  if (candidates.length === 0) return null;
+  return candidates;
+};
+
 export const executeChatTool = async (
   toolName: string,
   args: Record<string, unknown>,
@@ -207,6 +248,21 @@ export const executeChatTool = async (
   const organizationId = context.organizationId;
 
   switch (toolName) {
+    case "resolveProperty": {
+      const q = String(args.query ?? "").trim();
+      if (!q) {
+        return {
+          data: { matches: [] },
+          citations: [{ label: "Properties", detail: "Property records" }]
+        };
+      }
+
+      const matches = await resolvePropertyFromQuery(organizationId, q);
+      return {
+        data: { matches: matches ?? [] },
+        citations: [{ label: "Properties", detail: "Property records" }]
+      };
+    }
     case "listProperties": {
       const properties = await prisma.property.findMany({
         where: { organizationId },
@@ -227,18 +283,12 @@ export const executeChatTool = async (
     }
     case "getRentCollected": {
       const range = resolveDateRange(args.range as DateRangeInput | undefined);
-      const property = await resolveProperty(
-        organizationId,
-        args.propertyId as string | undefined,
-        args.propertyName as string | undefined
-      );
 
       const payments = await prisma.payment.findMany({
         where: {
           organizationId,
           status: "PAID",
           paidDate: { gte: range.start, lte: range.end },
-          ...propertyFilters(property?.id)
         },
         include: { property: true }
       });
@@ -267,18 +317,12 @@ export const executeChatTool = async (
       };
     }
     case "getOutstandingRent": {
-      const property = await resolveProperty(
-        organizationId,
-        args.propertyId as string | undefined,
-        args.propertyName as string | undefined
-      );
       const now = new Date();
       const payments = await prisma.payment.findMany({
         where: {
           organizationId,
           status: { in: ["PENDING", "LATE"] },
           dueDate: { lte: now },
-          ...propertyFilters(property?.id)
         },
         include: { property: true }
       });
@@ -308,17 +352,11 @@ export const executeChatTool = async (
     }
     case "getPropertyExpenses": {
       const range = resolveDateRange(args.range as DateRangeInput | undefined);
-      const property = await resolveProperty(
-        organizationId,
-        args.propertyId as string | undefined,
-        args.propertyName as string | undefined
-      );
 
       const expenses = await prisma.expense.findMany({
         where: {
           organizationId,
           date: { gte: range.start, lte: range.end },
-          ...propertyFilters(property?.id)
         },
         include: { property: true, vendor: true }
       });
@@ -358,17 +396,11 @@ export const executeChatTool = async (
     }
     case "getLeaseEnding": {
       const range = resolveDateRange(args.range as DateRangeInput | undefined);
-      const property = await resolveProperty(
-        organizationId,
-        args.propertyId as string | undefined,
-        args.propertyName as string | undefined
-      );
 
       const leases = await prisma.lease.findMany({
         where: {
           organizationId,
           endDate: { gte: range.start, lte: range.end },
-          ...propertyFilters(property?.id)
         },
         include: { tenant: true, property: true, unit: true }
       });
@@ -398,18 +430,10 @@ export const executeChatTool = async (
           citations: [{ label: "Documents", detail: "Document records" }]
         };
       }
-
-      const property = await resolveProperty(
-        organizationId,
-        args.propertyId as string | undefined,
-        args.propertyName as string | undefined
-      );
-
       const documents = await prisma.document.findMany({
         where: {
           organizationId,
           name: { contains: query, mode: "insensitive" },
-          ...propertyFilters(property?.id)
         },
         orderBy: { createdAt: "desc" }
       });
