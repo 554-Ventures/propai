@@ -460,7 +460,6 @@ const actionToolDefinitions = [
         patch: {
           type: "object" as const,
           additionalProperties: false as const,
-          minProperties: 1 as const,
           properties: {
             type: { type: "string" as const, description: "income|expense" },
             amount: { type: "number" as const },
@@ -519,7 +518,6 @@ const actionToolDefinitions = [
         patch: {
           type: "object" as const,
           additionalProperties: false as const,
-          minProperties: 1 as const,
           properties: {
             name: { type: "string" as const },
             addressLine1: { type: "string" as const },
@@ -577,7 +575,6 @@ const actionToolDefinitions = [
         patch: {
           type: "object" as const,
           additionalProperties: false as const,
-          minProperties: 1 as const,
           properties: {
             firstName: { type: "string" as const },
             lastName: { type: "string" as const },
@@ -631,7 +628,6 @@ const actionToolDefinitions = [
         patch: {
           type: "object" as const,
           additionalProperties: false as const,
-          minProperties: 1 as const,
           properties: {
             propertyId: { type: "string" as const },
             unitId: { type: "string" as const },
