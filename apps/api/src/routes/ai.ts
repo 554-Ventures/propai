@@ -1364,6 +1364,27 @@ router.post(
         });
       }
 
+      // Hard guardrail: in read-only chat mode, never allow the assistant to claim that it
+      // created/saved/updated records (writes require draft+confirm+execution receipts).
+      // If the model tries anyway, override with a deterministic message.
+      const successClaim = /\b(successfully|created|saved|done|completed|added|updated|deleted)\b/i.test(
+        safeResponseText
+      );
+      if (successClaim) {
+        safeResponseText =
+          "I haven’t created or changed anything yet. If you want me to create a property (or log a transaction, tenant, maintenance request), I’ll draft it for confirmation first.";
+        await logAiSecurityEvent({
+          userId,
+          sessionId: chatSession.id,
+          type: "hallucinated_write_claim_blocked",
+          severity: "high",
+          message: "Assistant attempted to claim a write in read-only mode",
+          metadata: {
+            toolCalls: toolCallLogs.map((t) => ({ toolName: t.toolName, status: t.status }))
+          }
+        });
+      }
+
       const assistantMessage = await prisma.chatMessage.create({
         data: {
           sessionId: chatSession.id,
