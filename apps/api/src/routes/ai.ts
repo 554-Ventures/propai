@@ -12,6 +12,7 @@ import {
 import { getOpenAIClient, getOpenAIModel } from "../lib/openai.js";
 import type { ResponseFunctionToolCall } from "openai/resources/responses/responses";
 import { planAgentTurn } from "../lib/ai/agent-planner.js";
+import { extractPendingArgsPatch } from "../lib/ai/pending-action-extractor.js";
 import { chatToolDefinitions, executeChatTool } from "../lib/ai/chat-tools.js";
 import { filterAiOutput } from "../security/output-filter.js";
 import { moderateText } from "../security/moderation.js";
@@ -913,7 +914,31 @@ router.post(
         userText: trimmedMessage
       });
 
-      if (unhandledText && Object.keys(patch).length === 0) {
+      // If the basic patcher couldn't handle the follow-up, use an LLM extractor to pull
+      // missing fields from natural language (agentic follow-ups like: "Name: X, Address: ...").
+      let extractedPatch: Record<string, unknown> | null = null;
+      if (unhandledText && Object.keys(patch).length === 0 && process.env.OPENAI_API_KEY) {
+        const missingForExtract = computeMissingFields(call.toolName, args);
+        try {
+          const sessionContext = await getChatSessionContext({
+            sessionId: chatSession.id,
+            organizationId,
+            userId
+          });
+          const extracted = await extractPendingArgsPatch({
+            toolName: call.toolName,
+            currentArgs: args,
+            missing: missingForExtract,
+            userMessage: trimmedMessage,
+            memorySummary: (sessionContext as any)?.summary ?? null
+          });
+          extractedPatch = extracted?.patch ?? null;
+        } catch {
+          extractedPatch = null;
+        }
+      }
+
+      if (unhandledText && Object.keys(patch).length === 0 && (!extractedPatch || Object.keys(extractedPatch).length === 0)) {
         // Don't silently mis-apply unrelated follow-ups (e.g. "add 4 units").
         // Leave draft unchanged and ask for explicit field(s).
         const missing = computeMissingFields(call.toolName, args);
@@ -960,7 +985,7 @@ router.post(
         return;
       }
 
-      call.args = { ...args, ...patch };
+      call.args = { ...args, ...patch, ...(extractedPatch ?? {}) };
 
       await prisma.aiActionLog.update({
         where: { id: existing.id },
