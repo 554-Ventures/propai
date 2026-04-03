@@ -182,7 +182,15 @@ export default function ChatPane() {
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const focusInput = useCallback(() => {
+    if (typeof window === "undefined") return;
+    // Delay until after React state updates/layout.
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 0);
+  }, []);
 
   const latestMessagesRef = useRef<ChatMessage[]>([]);
   useEffect(() => {
@@ -266,7 +274,7 @@ export default function ChatPane() {
     // accidentally fork context. Force the user to either pick a choice or cancel/start over.
     if (draftNeedsClarify) {
       setError("Please choose one of the options above (or Cancel/Start over) to continue.");
-      inputRef.current?.focus();
+      focusInput();
       return;
     }
 
@@ -281,6 +289,7 @@ export default function ChatPane() {
     setInput("");
     setError(null);
     setLoading(true);
+    focusInput();
 
     try {
       // Always read the latest messages at send-time to avoid stale closure issues.
@@ -340,7 +349,7 @@ export default function ChatPane() {
         };
         setMessages((prev) => [...prev, assistantMessage]);
         // Nudge focus back to input so user can continue quickly.
-        inputRef.current?.focus();
+        focusInput();
         return;
       }
 
@@ -563,13 +572,13 @@ export default function ChatPane() {
     const handleSend = (event: Event) => {
       const detail = (event as CustomEvent<{ message?: string }>).detail;
       if (!detail?.message) return;
-      inputRef.current?.focus();
+      focusInput();
       void sendMessage(detail.message);
     };
 
     window.addEventListener(CHAT_SEND_EVENT, handleSend);
     return () => window.removeEventListener(CHAT_SEND_EVENT, handleSend);
-  }, [sendMessage]);
+  }, [focusInput, sendMessage]);
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -841,7 +850,7 @@ export default function ChatPane() {
 
       <div className="border-t border-slate-800/70 px-4 py-3">
         <div className="flex items-center gap-2">
-          <input
+          <textarea
             ref={inputRef}
             value={input}
             onChange={(event) => setInput(event.target.value)}
@@ -858,7 +867,8 @@ export default function ChatPane() {
                   ? "Continue this draft (or Cancel/Start over)…"
                   : "Ask about rent, properties, expenses..."
             }
-            className="flex-1 rounded-2xl border border-slate-800/70 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400/70 focus:outline-none"
+            rows={1}
+            className="flex-1 resize-none rounded-2xl border border-slate-800/70 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400/70 focus:outline-none"
             disabled={loading || draftNeedsClarify}
           />
           <Button onClick={() => sendMessage(input)} disabled={loading || draftNeedsClarify}>
