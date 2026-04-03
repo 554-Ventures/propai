@@ -10,6 +10,7 @@
     "lint": "echo 'api lint not initialized'",
     "type-check": "tsc --noEmit",
     "test": "prisma migrate reset --force --skip-seed && prisma generate && vitest run",
+    "test:integration": "prisma migrate reset --force --skip-seed && prisma generate && vitest run src/__tests__/ai-chat.integration.test.ts",
     "prisma": "prisma",
     "migrate": "prisma migrate dev",
     "generate": "prisma generate"

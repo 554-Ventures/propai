@@ -103,6 +103,121 @@ export const parseMessageToToolCalls = (message: string): AiPlannedToolCall[] =>
     }
   }
 
+  // Heuristic fallback for offline mode (when OPENAI is unavailable):
+  // Detect simple cashflow log intents from natural language.
+  // Examples:
+  // - "log an expense $85 utilities yesterday"
+  // - "record income 1200 rent today"
+  const lower = trimmed.toLowerCase();
+  const verb = /(log|record|add|enter|create)\b/.test(lower);
+  const isExpense = /\bexpense\b/.test(lower) || /\bspent\b/.test(lower);
+  const isIncome = /\bincome\b/.test(lower) || /\breceived\b/.test(lower);
+  if (verb && (isExpense || isIncome)) {
+    // amount: grab first number-like token
+    const amountMatch = trimmed.replace(/,/g, "").match(/(\$?)(\d+(?:\.\d+)?)/);
+    const amount = amountMatch ? Number(amountMatch[2]) : null;
+
+    // date: today/yesterday only (extend later)
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+    const date = /\byesterday\b/.test(lower) ? yesterday : today;
+    const toISO = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+
+    // category: try to pick the word after amount, otherwise null (clarify step will ask)
+    let category: string | null = null;
+    if (amountMatch) {
+      const after = trimmed.slice(amountMatch.index! + amountMatch[0].length).trim();
+      if (after) {
+        // take first 1-3 tokens until we hit a date-ish word
+        const tokens = after.split(/\s+/).filter(Boolean);
+        const stopWords = new Set(["today", "yesterday", "on", "for"]);
+        const catTokens: string[] = [];
+        for (const t of tokens) {
+          const tl = t.toLowerCase();
+          if (stopWords.has(tl)) break;
+          catTokens.push(t.replace(/[^\w-]/g, ""));
+          if (catTokens.length >= 3) break;
+        }
+        const joined = catTokens.join(" ").trim();
+        if (joined) category = joined;
+      }
+    }
+
+    const type = isIncome ? "income" : "expense";
+    const args: Record<string, unknown> = {
+      type,
+      amount: amount ?? undefined,
+      date: toISO(date),
+      category: category ?? undefined
+    };
+
+    return [{ toolName: "createCashflowTransaction", args }];
+  }
+
+  // Create tenant heuristic: "create tenant Jane Doe"
+  if (/\bcreate\s+tenant\b/.test(lower)) {
+    const after = trimmed.replace(/\bcreate\s+tenant\b/i, "").trim();
+    const parts = after.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return [
+        {
+          toolName: "createTenant",
+          args: {
+            firstName: parts[0],
+            lastName: parts.slice(1).join(" ")
+          }
+        }
+      ];
+    }
+    return [{ toolName: "createTenant", args: {} }];
+  }
+
+  // Create property heuristic: "create a property called X at 123 ..."
+  if (/\bcreate\s+(a\s+)?property\b/.test(lower)) {
+    const nameMatch = trimmed.match(/(?:called|named)\s+([^,]+?)(?:\s+at\s+|,|$)/i);
+    const atMatch = trimmed.match(/\bat\s+([^,]+?)(?:,|$)/i);
+    const cityStateZipMatch = trimmed.match(/,\s*([^,]+),\s*([A-Z]{2})\s*(\d{5})(?:\b|$)/);
+    const name = nameMatch ? nameMatch[1].trim() : undefined;
+    const addressLine1 = atMatch ? atMatch[1].trim() : undefined;
+    const city = cityStateZipMatch ? cityStateZipMatch[1].trim() : undefined;
+    const state = cityStateZipMatch ? cityStateZipMatch[2].trim() : undefined;
+    const postalCode = cityStateZipMatch ? cityStateZipMatch[3].trim() : undefined;
+
+    return [
+      {
+        toolName: "createProperty",
+        args: {
+          name,
+          addressLine1,
+          city,
+          state,
+          postalCode
+        }
+      }
+    ];
+  }
+
+  // Create maintenance request heuristic: "create maintenance request ..."
+  if (/\bcreate\s+(a\s+)?maintenance\s+request\b/.test(lower)) {
+    // We can't reliably resolve propertyId from name without a model/read tool.
+    // Still return a planned call so /ai/chat can enter clarify mode and offer property choices.
+    const titleMatch = trimmed.replace(/\bcreate\s+(a\s+)?maintenance\s+request\s*:?\s*/i, "").trim();
+    return [
+      {
+        toolName: "createMaintenanceRequest",
+        args: {
+          title: titleMatch || undefined
+        }
+      }
+    ];
+  }
+
   return [];
 };
 

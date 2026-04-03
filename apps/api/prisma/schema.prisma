@@ -52,28 +52,29 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users        User[]
+  users       User[]
   memberships Membership[]
 
-  properties   Property[]
-  units        Unit[]
-  tenants      Tenant[]
-  leases       Lease[]
-  payments     Payment[]
-  maintenance  MaintenanceRequest[]
-  vendors      Vendor[]
-  expenses     Expense[]
-  transactions Transaction[]
-  documents    Document[]
+  properties    Property[]
+  units         Unit[]
+  tenants       Tenant[]
+  leases        Lease[]
+  payments      Payment[]
+  maintenance   MaintenanceRequest[]
+  vendors       Vendor[]
+  expenses      Expense[]
+  transactions  Transaction[]
+  documents     Document[]
   notifications Notification[]
-  aiInsights   AIInsight[]
-  chatSessions ChatSession[]
+  aiInsights    AIInsight[]
+  chatSessions  ChatSession[]
 
-  aiUsage      AiUsage[]
+  aiUsage          AiUsage[]
   aiSecurityEvents AiSecurityEvent[]
-  aiBudget     AiBudget[]
+  aiBudget         AiBudget[]
 
-  aiActionLogs AiActionLog[]
+  aiActionLogs       AiActionLog[]
+  aiActionExecutions AiActionExecution[]
 
   invitations Invitation[]
 }
@@ -95,35 +96,36 @@ model Membership {
 }
 
 model User {
-  id           String        @id @default(cuid())
-  email        String        @unique
+  id           String   @id @default(cuid())
+  email        String   @unique
   name         String?
   passwordHash String
   defaultOrgId String
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   organization Organization @relation(fields: [defaultOrgId], references: [id], onDelete: Cascade)
   memberships  Membership[]
 
-  properties   Property[]
-  units        Unit[]
-  tenants      Tenant[]
-  leases       Lease[]
-  payments     Payment[]
-  maintenance  MaintenanceRequest[]
-  vendors      Vendor[]
-  expenses     Expense[]
-  transactions Transaction[]
-  documents    Document[]
+  properties    Property[]
+  units         Unit[]
+  tenants       Tenant[]
+  leases        Lease[]
+  payments      Payment[]
+  maintenance   MaintenanceRequest[]
+  vendors       Vendor[]
+  expenses      Expense[]
+  transactions  Transaction[]
+  documents     Document[]
   notifications Notification[]
-  aiInsights   AIInsight[]
-  chatSessions ChatSession[]
-  aiUsage      AiUsage[]
-  aiSecurityEvents AiSecurityEvent[]
-  aiBudget     AiBudget?
+  aiInsights    AIInsight[]
 
-  aiActionLogs AiActionLog[]
+  aiActionLogs       AiActionLog[]
+  aiActionExecutions AiActionExecution[]
+  chatSessions       ChatSession[]
+  aiUsage            AiUsage[]
+  aiSecurityEvents   AiSecurityEvent[]
+  aiBudget           AiBudget?
 
   sentInvitations Invitation[] @relation("InvitedBy")
 
@@ -131,18 +133,18 @@ model User {
 }
 
 model Invitation {
-  id             String   @id @default(cuid())
-  organizationId String
-  email          String
-  role           OrgRole  @default(MEMBER)
-  tokenHash      String   @unique
-  expiresAt      DateTime
-  acceptedAt     DateTime?
+  id              String    @id @default(cuid())
+  organizationId  String
+  email           String
+  role            OrgRole   @default(MEMBER)
+  tokenHash       String    @unique
+  expiresAt       DateTime
+  acceptedAt      DateTime?
   invitedByUserId String
-  createdAt      DateTime @default(now())
+  createdAt       DateTime  @default(now())
 
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  invitedBy      User         @relation("InvitedBy", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy    User         @relation("InvitedBy", fields: [invitedByUserId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([email])
@@ -150,22 +152,22 @@ model Invitation {
 }
 
 model Property {
-  id           String   @id @default(cuid())
-  userId       String
+  id             String   @id @default(cuid())
+  userId         String
   organizationId String
-  name         String
-  addressLine1 String
-  addressLine2 String?
-  city         String
-  state        String
-  postalCode   String
-  country      String   @default("US")
-  notes        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  name           String
+  addressLine1   String
+  addressLine2   String?
+  city           String
+  state          String
+  postalCode     String
+  country        String   @default("US")
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  user         User     @relation(fields: [userId], references: [id])
-  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User                 @relation(fields: [userId], references: [id])
+  organization Organization         @relation(fields: [organizationId], references: [id])
   units        Unit[]
   leases       Lease[]
   payments     Payment[]
@@ -180,152 +182,152 @@ model Property {
 }
 
 model Unit {
-  id         String   @id @default(cuid())
-  userId     String
+  id             String    @id @default(cuid())
+  userId         String
   organizationId String
-  propertyId String
-  label      String
-  bedrooms   Int?
-  bathrooms  Float?
-  squareFeet Int?
-  rent       Int?
-  archivedAt DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  propertyId     String
+  label          String
+  bedrooms       Int?
+  bathrooms      Float?
+  squareFeet     Int?
+  rent           Int?
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  user       User     @relation(fields: [userId], references: [id])
-  organization Organization @relation(fields: [organizationId], references: [id])
-  property   Property @relation(fields: [propertyId], references: [id])
-  leases     Lease[]
-  maintenance MaintenanceRequest[]
+  user         User                 @relation(fields: [userId], references: [id])
+  organization Organization         @relation(fields: [organizationId], references: [id])
+  property     Property             @relation(fields: [propertyId], references: [id])
+  leases       Lease[]
+  maintenance  MaintenanceRequest[]
 
   @@index([organizationId])
 }
 
 model Tenant {
-  id         String   @id @default(cuid())
-  userId     String
+  id             String   @id @default(cuid())
+  userId         String
   organizationId String
-  firstName  String
-  lastName   String
-  email      String?
-  phone      String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  firstName      String
+  lastName       String
+  email          String?
+  phone          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  user       User     @relation(fields: [userId], references: [id])
-  organization Organization @relation(fields: [organizationId], references: [id])
-  leases     Lease[]
-  maintenance MaintenanceRequest[]
+  user         User                 @relation(fields: [userId], references: [id])
+  organization Organization         @relation(fields: [organizationId], references: [id])
+  leases       Lease[]
+  maintenance  MaintenanceRequest[]
 
   @@index([organizationId])
 }
 
 model Lease {
-  id        String      @id @default(cuid())
-  userId    String
+  id             String      @id @default(cuid())
+  userId         String
   organizationId String
-  propertyId String
-  unitId    String
-  tenantId  String
-  startDate DateTime
-  endDate   DateTime?
-  rent      Int
-  status    LeaseStatus @default(ACTIVE)
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  propertyId     String
+  unitId         String
+  tenantId       String
+  startDate      DateTime
+  endDate        DateTime?
+  rent           Int
+  status         LeaseStatus @default(ACTIVE)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
-  user      User     @relation(fields: [userId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
   organization Organization @relation(fields: [organizationId], references: [id])
-  property  Property @relation(fields: [propertyId], references: [id])
-  unit      Unit     @relation(fields: [unitId], references: [id])
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  payments  Payment[]
-  documents Document[]
+  property     Property     @relation(fields: [propertyId], references: [id])
+  unit         Unit         @relation(fields: [unitId], references: [id])
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  payments     Payment[]
+  documents    Document[]
 
   @@index([organizationId])
 }
 
 model Payment {
-  id        String        @id @default(cuid())
-  userId    String
+  id             String        @id @default(cuid())
+  userId         String
   organizationId String
-  propertyId String
-  leaseId   String
-  amount    Int
-  dueDate   DateTime
-  paidDate  DateTime?
-  status    PaymentStatus @default(PENDING)
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  propertyId     String
+  leaseId        String
+  amount         Int
+  dueDate        DateTime
+  paidDate       DateTime?
+  status         PaymentStatus @default(PENDING)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  user      User     @relation(fields: [userId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
   organization Organization @relation(fields: [organizationId], references: [id])
-  property  Property @relation(fields: [propertyId], references: [id])
-  lease     Lease    @relation(fields: [leaseId], references: [id])
+  property     Property     @relation(fields: [propertyId], references: [id])
+  lease        Lease        @relation(fields: [leaseId], references: [id])
 
   @@index([organizationId])
 }
 
 model MaintenanceRequest {
-  id          String            @id @default(cuid())
-  userId      String
+  id             String            @id @default(cuid())
+  userId         String
   organizationId String
-  propertyId  String
-  unitId      String?
-  tenantId    String?
-  title       String
-  description String?
-  status      MaintenanceStatus @default(PENDING)
-  cost        Int?
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  propertyId     String
+  unitId         String?
+  tenantId       String?
+  title          String
+  description    String?
+  status         MaintenanceStatus @default(PENDING)
+  cost           Int?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
-  user     User     @relation(fields: [userId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
   organization Organization @relation(fields: [organizationId], references: [id])
-  property Property @relation(fields: [propertyId], references: [id])
-  unit     Unit?    @relation(fields: [unitId], references: [id])
-  tenant   Tenant?  @relation(fields: [tenantId], references: [id])
+  property     Property     @relation(fields: [propertyId], references: [id])
+  unit         Unit?        @relation(fields: [unitId], references: [id])
+  tenant       Tenant?      @relation(fields: [tenantId], references: [id])
 
   @@index([organizationId])
 }
 
 model Vendor {
-  id        String   @id @default(cuid())
-  userId    String
+  id             String   @id @default(cuid())
+  userId         String
   organizationId String
-  name      String
-  email     String?
-  phone     String?
-  trade     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  name           String
+  email          String?
+  phone          String?
+  trade          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  user      User     @relation(fields: [userId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
   organization Organization @relation(fields: [organizationId], references: [id])
-  expenses  Expense[]
+  expenses     Expense[]
 
   @@index([organizationId])
 }
 
 model Expense {
-  id         String   @id @default(cuid())
-  userId     String
+  id             String   @id @default(cuid())
+  userId         String
   organizationId String
-  propertyId String
-  vendorId   String?
-  amount     Int
-  category   String
-  date       DateTime
-  notes      String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  propertyId     String
+  vendorId       String?
+  amount         Int
+  category       String
+  date           DateTime
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  user      User     @relation(fields: [userId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
   organization Organization @relation(fields: [organizationId], references: [id])
-  property  Property @relation(fields: [propertyId], references: [id])
-  vendor    Vendor?  @relation(fields: [vendorId], references: [id])
-  aiInsights AIInsight[]
+  property     Property     @relation(fields: [propertyId], references: [id])
+  vendor       Vendor?      @relation(fields: [vendorId], references: [id])
+  aiInsights   AIInsight[]
 
   @@index([organizationId])
 }
@@ -343,9 +345,9 @@ model Transaction {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  property       Property?       @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  property     Property?    @relation(fields: [propertyId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([organizationId, date])
@@ -354,74 +356,74 @@ model Transaction {
 }
 
 model AIInsight {
-  id            String   @id @default(cuid())
-  userId        String
+  id             String    @id @default(cuid())
+  userId         String
   organizationId String
-  propertyId    String?
-  expenseId     String?
-  type          String
-  input         Json
-  output        Json
-  confidence    Float?
-  reasoning     String?
-  overrideValue String?
-  overriddenAt  DateTime?
-  createdAt     DateTime @default(now())
+  propertyId     String?
+  expenseId      String?
+  type           String
+  input          Json
+  output         Json
+  confidence     Float?
+  reasoning      String?
+  overrideValue  String?
+  overriddenAt   DateTime?
+  createdAt      DateTime  @default(now())
 
-  user      User      @relation(fields: [userId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
   organization Organization @relation(fields: [organizationId], references: [id])
-  property  Property? @relation(fields: [propertyId], references: [id])
-  expense   Expense?  @relation(fields: [expenseId], references: [id])
+  property     Property?    @relation(fields: [propertyId], references: [id])
+  expense      Expense?     @relation(fields: [expenseId], references: [id])
 
   @@index([organizationId])
 }
 
 model Document {
-  id         String       @id @default(cuid())
-  userId     String
+  id             String       @id @default(cuid())
+  userId         String
   organizationId String
-  propertyId String?
-  leaseId    String?
-  type       DocumentType
-  name       String
-  url        String
-  createdAt  DateTime     @default(now())
+  propertyId     String?
+  leaseId        String?
+  type           DocumentType
+  name           String
+  url            String
+  createdAt      DateTime     @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
   organization Organization @relation(fields: [organizationId], references: [id])
-  property  Property? @relation(fields: [propertyId], references: [id])
-  lease     Lease?    @relation(fields: [leaseId], references: [id])
+  property     Property?    @relation(fields: [propertyId], references: [id])
+  lease        Lease?       @relation(fields: [leaseId], references: [id])
 
   @@index([organizationId])
 }
 
 model Notification {
-  id        String   @id @default(cuid())
-  userId    String
+  id             String    @id @default(cuid())
+  userId         String
   organizationId String
-  type      String
-  message   String
-  readAt    DateTime?
-  createdAt DateTime @default(now())
+  type           String
+  message        String
+  readAt         DateTime?
+  createdAt      DateTime  @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
   organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
 }
 
 model ChatSession {
-  id         String   @id @default(cuid())
-  userId     String
+  id             String   @id @default(cuid())
+  userId         String
   organizationId String
-  propertyId String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  propertyId     String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  user     User      @relation(fields: [userId], references: [id])
-  organization Organization @relation(fields: [organizationId], references: [id])
-  property Property? @relation(fields: [propertyId], references: [id])
-  messages ChatMessage[]
+  user         User          @relation(fields: [userId], references: [id])
+  organization Organization  @relation(fields: [organizationId], references: [id])
+  property     Property?     @relation(fields: [propertyId], references: [id])
+  messages     ChatMessage[]
 
   @@index([organizationId])
   @@index([organizationId, userId])
@@ -435,7 +437,7 @@ model ChatMessage {
   metadata  Json?
   createdAt DateTime @default(now())
 
-  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session   ChatSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   toolCalls ToolCallLog[]
 
   @@index([sessionId, createdAt])
@@ -450,40 +452,40 @@ model ToolCallLog {
   status    String
   createdAt DateTime @default(now())
 
-  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 }
 
 model AiUsage {
-  id           String   @id @default(cuid())
-  userId       String
+  id             String   @id @default(cuid())
+  userId         String
   organizationId String
-  sessionId    String?
-  messageId    String?
-  model        String
-  inputTokens  Int
-  outputTokens Int
-  totalTokens  Int
-  costUsd      Float?
-  createdAt    DateTime @default(now())
+  sessionId      String?
+  messageId      String?
+  model          String
+  inputTokens    Int
+  outputTokens   Int
+  totalTokens    Int
+  costUsd        Float?
+  createdAt      DateTime @default(now())
 
-  user         User     @relation(fields: [userId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
 }
 
 model AiSecurityEvent {
-  id        String   @id @default(cuid())
-  userId    String?
+  id             String   @id @default(cuid())
+  userId         String?
   organizationId String?
-  sessionId String?
-  type      String
-  severity  String
-  message   String
-  metadata  Json?
-  createdAt DateTime @default(now())
+  sessionId      String?
+  type           String
+  severity       String
+  message        String
+  metadata       Json?
+  createdAt      DateTime @default(now())
 
-  user      User?    @relation(fields: [userId], references: [id])
+  user         User?         @relation(fields: [userId], references: [id])
   organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
@@ -497,8 +499,8 @@ model AiBudget {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  user            User     @relation(fields: [userId], references: [id])
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
 }
@@ -515,11 +517,32 @@ model AiActionLog {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  executions   AiActionExecution[]
 
   @@index([organizationId])
   @@index([organizationId, userId])
   @@index([organizationId, status])
   @@index([organizationId, actionType])
+}
+
+model AiActionExecution {
+  id              String   @id @default(cuid())
+  organizationId  String
+  userId          String
+  actionId        String
+  clientRequestId String
+  status          String   @default("CONFIRMED")
+  result          Json?
+  error           String?
+  createdAt       DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action       AiActionLog  @relation(fields: [actionId], references: [id], onDelete: Cascade)
+
+  @@unique([actionId, clientRequestId])
+  @@index([organizationId])
+  @@index([organizationId, userId])
 }

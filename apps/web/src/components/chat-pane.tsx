@@ -103,6 +103,55 @@ type AiPlanAltClarifyResponse = {
   };
 };
 
+type AiChatResponse =
+  | {
+      mode: "chat";
+      pendingActionId: null;
+      message: string;
+      sessionId?: string;
+      messageId?: string;
+    }
+  | {
+      mode: "clarify";
+      pendingActionId: string;
+      summary: string;
+      draft: {
+        kind: string;
+        fields: Record<string, unknown>;
+        toolCalls?: Array<{ toolName: string; args: Record<string, unknown> }>;
+      };
+      clarify?: {
+        choices: Array<{ field: string; options: Array<{ label: string; value: any }> }>;
+      };
+      sessionId?: string;
+      messageId?: string;
+    }
+  | {
+      mode: "draft";
+      pendingActionId: string;
+      summary: string;
+      draft: {
+        kind: string;
+        fields: Record<string, unknown>;
+        toolCalls?: Array<{ toolName: string; args: Record<string, unknown> }>;
+      };
+      requiresConfirm?: boolean;
+      sessionId?: string;
+      messageId?: string;
+    }
+  | {
+      mode: "result";
+      pendingActionId: null;
+      receipt?: {
+        title: string;
+        href?: string;
+        detail?: string;
+      };
+      result: Array<{ toolName: string; output: any }> | any;
+      sessionId?: string;
+      messageId?: string;
+    };
+
 type AiConfirmResponse = {
   ok: true;
   status: string;
@@ -135,12 +184,22 @@ export default function ChatPane() {
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const isWriteIntent = useCallback((text: string) => {
-    const lower = text.toLowerCase();
-    const hasVerb = /(log|add|create|record|enter)/.test(lower);
-    const hasNoun = /(expense|income|transaction|payment|spent|received)/.test(lower);
-    return hasVerb && hasNoun;
-  }, []);
+  const latestMessagesRef = useRef<ChatMessage[]>([]);
+  useEffect(() => {
+    latestMessagesRef.current = messages;
+  }, [messages]);
+
+  const lastDraft = useMemo(() => {
+    return [...messages]
+      .reverse()
+      .find((m) => m.role === "assistant" && m.metadata?.aiDraft)?.metadata?.aiDraft;
+  }, [messages]);
+
+  const isDraftPending = Boolean(lastDraft?.planId);
+  const draftNeedsClarify = Boolean(lastDraft?.clarify?.choices?.length);
+
+  // NOTE: we no longer heuristically decide whether something is a write on the client.
+  // The server (/ai/chat) is the single authority and returns mode=chat|clarify|draft|result.
 
   const storedSessionId = useMemo(() => {
     if (typeof window === "undefined") return null;
@@ -203,6 +262,14 @@ export default function ChatPane() {
     const trimmed = text.trim();
     if (!trimmed) return;
 
+    // Guardrail UX: if we're awaiting clarification, don't allow arbitrary text that can
+    // accidentally fork context. Force the user to either pick a choice or cancel/start over.
+    if (draftNeedsClarify) {
+      setError("Please choose one of the options above (or Cancel/Start over) to continue.");
+      inputRef.current?.focus();
+      return;
+    }
+
     const optimisticMessage: ChatMessage = {
       id: `local-${Date.now()}`,
       role: "user",
@@ -216,111 +283,84 @@ export default function ChatPane() {
     setLoading(true);
 
     try {
-      // If we have an in-progress AI action (clarifying or draft), route follow-ups through /ai/plan.
-      const lastDraft = [...messages]
+      // Always read the latest messages at send-time to avoid stale closure issues.
+      const draft = [...latestMessagesRef.current]
         .reverse()
         .find((m) => m.role === "assistant" && m.metadata?.aiDraft)?.metadata?.aiDraft;
 
-      if (lastDraft || isWriteIntent(trimmed)) {
-        const data = await apiFetch<AiPlanResponse | AiPlanAltResponse | AiPlanAltClarifyResponse>("/ai/plan", {
-          method: "POST",
-          auth: true,
-          body: JSON.stringify({ message: trimmed, pendingActionId: lastDraft?.planId })
-        });
+      const data = await apiFetch<AiChatResponse>("/ai/chat", {
+        method: "POST",
+        auth: true,
+        body: JSON.stringify({
+          message: trimmed,
+          pendingActionId: draft?.planId,
+          sessionId: localStorage.getItem(STORAGE_KEY) ?? undefined
+        })
+      });
 
-        // Newer server shape: { pendingActionId, plan, requiresConfirm }
-        if ((data as any)?.plan && "requiresConfirm" in (data as any)) {
-          const d = data as AiPlanAltResponse | AiPlanAltClarifyResponse;
+      if (data.sessionId) {
+        localStorage.setItem(STORAGE_KEY, data.sessionId);
+        setActiveSessionId(data.sessionId);
+      }
 
-          // Clarifying question / not ready to confirm yet.
-          if (!d.requiresConfirm || !d.pendingActionId) {
-            const assistantMessage: ChatMessage = {
-              id: `assistant-clarify-${Date.now()}`,
-              role: "assistant",
-              content: d.plan.summary ?? "",
-              createdAt: new Date().toISOString(),
-              metadata: d.pendingActionId
-                ? {
-                    aiDraft: {
-                      planId: d.pendingActionId,
-                      kind: (d.plan as any).kind ?? "",
-                      summary: d.plan.summary ?? "",
-                      fields: (d.plan as any).fields ?? {},
-                      toolCalls: (d.plan as any).toolCalls ?? [],
-                      clarify: (d as any).clarify ? { choices: (d as any).clarify.choices ?? [] } : undefined
-                    }
-                  }
-                : null
-            };
-            setMessages((prev) => [...prev, assistantMessage]);
-            return;
-          }
-
-          const assistantMessage: ChatMessage = {
-            id: `assistant-draft-${Date.now()}`,
-            role: "assistant",
-            content: "",
-            createdAt: new Date().toISOString(),
-            metadata: {
-              aiDraft: {
-                planId: d.pendingActionId,
-                kind: (d.plan as any).kind ?? "",
-                summary: d.plan.summary,
-                fields: (d.plan as any).fields ?? {},
-                toolCalls: (d.plan as any).toolCalls ?? []
-              }
-            }
-          };
-          setMessages((prev) => [...prev, assistantMessage]);
-        } else if ((data as any).mode === "draft") {
-          const assistantMessage: ChatMessage = {
-            id: `assistant-draft-${Date.now()}`,
-            role: "assistant",
-            content: "",
-            createdAt: new Date().toISOString(),
-            metadata: {
-              aiDraft: (data as Extract<AiPlanResponse, { mode: "draft" }>).draft
-            }
-          };
-          setMessages((prev) => [...prev, assistantMessage]);
-        } else {
-          const assistantMessage: ChatMessage = {
+      if (data.mode === "chat") {
+        setMessages((prev) => [
+          ...prev,
+          {
             id: `assistant-${Date.now()}`,
             role: "assistant",
-            content: (data as Extract<AiPlanResponse, { mode: "chat" }>).message,
+            content: data.message,
             createdAt: new Date().toISOString()
-          };
-          setMessages((prev) => [...prev, assistantMessage]);
-        }
-      } else {
-        const payload = {
-          message: trimmed,
-          sessionId: localStorage.getItem(STORAGE_KEY) ?? undefined
-        };
-        const data = await apiFetch<ChatResponse>("/api/chat", {
-          method: "POST",
-          auth: true,
-          body: JSON.stringify(payload)
-        });
+          }
+        ]);
+        void refreshSessions();
+        return;
+      }
 
-        if (data.sessionId) {
-          localStorage.setItem(STORAGE_KEY, data.sessionId);
-          setActiveSessionId(data.sessionId);
-        }
-
+      if (data.mode === "clarify" || data.mode === "draft") {
+        const defaultClarifyContent =
+          data.mode === "clarify"
+            ? data.summary || "I need one more detail to finish this. Please choose an option below."
+            : "";
         const assistantMessage: ChatMessage = {
-          id: `assistant-${Date.now()}`,
+          id: `${data.mode === "clarify" ? "assistant-clarify" : "assistant-draft"}-${Date.now()}`,
           role: "assistant",
-          content: data.response,
+          content: defaultClarifyContent,
           createdAt: new Date().toISOString(),
           metadata: {
-            toolCalls: data.toolCalls ?? [],
-            citations: data.citations ?? []
+            aiDraft: {
+              planId: data.pendingActionId,
+              kind: data.draft.kind ?? "",
+              summary: data.summary,
+              fields: data.draft.fields ?? {},
+              toolCalls: data.draft.toolCalls ?? [],
+              clarify: data.mode === "clarify" ? { choices: data.clarify?.choices ?? [] } : undefined
+            }
           }
         };
+        setMessages((prev) => [...prev, assistantMessage]);
+        // Nudge focus back to input so user can continue quickly.
+        inputRef.current?.focus();
+        return;
+      }
 
+      if (data.mode === "result") {
+        const assistantMessage: ChatMessage = {
+          id: `assistant-result-${Date.now()}`,
+          role: "assistant",
+          content: "",
+          createdAt: new Date().toISOString(),
+          metadata: {
+            aiReceipt: {
+              title: data.receipt?.title ?? "Saved",
+              href: data.receipt?.href,
+              detail: data.receipt?.detail
+            }
+          }
+        };
         setMessages((prev) => [...prev, assistantMessage]);
         void refreshSessions();
+        return;
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send message");
@@ -328,7 +368,7 @@ export default function ChatPane() {
       setLoading(false);
     }
     },
-    [isWriteIntent, loading, messages, refreshSessions]
+    [loading, messages, refreshSessions]
   );
 
   const startNewChat = useCallback(async () => {
@@ -357,6 +397,24 @@ export default function ChatPane() {
       setLoading(false);
     }
   }, [activeSessionId, loading, messages, refreshSessions]);
+
+  const startOver = useCallback(async () => {
+    // Convenience: cancel any pending draft first (best-effort), then start a new chat session.
+    if (loading) return;
+    const planId = lastDraft?.planId;
+    if (planId) {
+      try {
+        await apiFetch<{ ok: true }>("/ai/cancel", {
+          method: "POST",
+          auth: true,
+          body: JSON.stringify({ actionId: planId })
+        });
+      } catch {
+        // Non-fatal.
+      }
+    }
+    await startNewChat();
+  }, [lastDraft?.planId, loading, startNewChat]);
 
   const clearChat = useCallback(async () => {
     if (loading) return;
@@ -402,11 +460,25 @@ export default function ChatPane() {
     setError(null);
     setConfirmingPlanId(planId);
     try {
-      const data = await apiFetch<AiConfirmResponse>("/ai/confirm", {
+      const data = await apiFetch<AiChatResponse>("/ai/chat", {
         method: "POST",
         auth: true,
-        body: JSON.stringify({ actionId: planId })
+        body: JSON.stringify({
+          confirm: true,
+          pendingActionId: planId,
+          sessionId: localStorage.getItem(STORAGE_KEY) ?? undefined,
+          clientRequestId: crypto.randomUUID?.() ?? String(Date.now())
+        })
       });
+
+      if (data.sessionId) {
+        localStorage.setItem(STORAGE_KEY, data.sessionId);
+        setActiveSessionId(data.sessionId);
+      }
+
+      if (data.mode !== "result") {
+        throw new Error("Unexpected response from /ai/chat confirm");
+      }
 
       const first = Array.isArray((data as any).result) ? (data as any).result[0] : null;
       const toolName = first?.toolName as string | undefined;
@@ -530,16 +602,27 @@ export default function ChatPane() {
         </div>
 
         <div className="mt-2 flex flex-wrap gap-2">
-        {quickActions.map((action) => (
-          <button
-            key={action.label}
-            onClick={() => sendMessage(action.message)}
-            className="rounded-full border border-slate-800/80 bg-slate-900/60 px-3 py-1 text-xs text-slate-200 transition hover:border-cyan-400/70"
-            disabled={loading}
-          >
-            {action.label}
-          </button>
-        ))}
+          {quickActions.map((action) => (
+            <button
+              key={action.label}
+              onClick={() => sendMessage(action.message)}
+              className="rounded-full border border-slate-800/80 bg-slate-900/60 px-3 py-1 text-xs text-slate-200 transition hover:border-cyan-400/70"
+              disabled={loading || isDraftPending}
+              title={isDraftPending ? "Finish or cancel the draft first" : undefined}
+            >
+              {action.label}
+            </button>
+          ))}
+          {isDraftPending ? (
+            <button
+              onClick={() => void startOver()}
+              className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-100 transition hover:border-rose-400/60"
+              disabled={loading}
+              title="Cancel the pending draft and start a new chat"
+            >
+              Start over
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -768,14 +851,25 @@ export default function ChatPane() {
                 void sendMessage(input);
               }
             }}
-            placeholder="Ask about rent, properties, expenses..."
+            placeholder={
+              draftNeedsClarify
+                ? "Choose an option above to continue…"
+                : isDraftPending
+                  ? "Continue this draft (or Cancel/Start over)…"
+                  : "Ask about rent, properties, expenses..."
+            }
             className="flex-1 rounded-2xl border border-slate-800/70 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400/70 focus:outline-none"
-            disabled={loading}
+            disabled={loading || draftNeedsClarify}
           />
-          <Button onClick={() => sendMessage(input)} disabled={loading}>
+          <Button onClick={() => sendMessage(input)} disabled={loading || draftNeedsClarify}>
             Send
           </Button>
         </div>
+        {draftNeedsClarify ? (
+          <p className="mt-2 text-[11px] text-slate-400">
+            Waiting for your selection above. This keeps the draft in context.
+          </p>
+        ) : null}
       </div>
     </div>
   );
