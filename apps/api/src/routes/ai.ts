@@ -1121,6 +1121,30 @@ router.post(
       }
     }
 
+    // If the planner returned a clarification question, do NOT fall back into read-only chat mode.
+    // Clarify must be represented as a first-class state (mode=clarify), not a normal chat response.
+    if (plannedCalls.length === 0 && assistantText) {
+      const assistantMessage = await prisma.chatMessage.create({
+        data: {
+          sessionId: chatSession.id,
+          role: "assistant",
+          content: assistantText
+        }
+      });
+      await prisma.chatSession.update({ where: { id: chatSession.id }, data: { updatedAt: new Date() } });
+      res.json({
+        mode: "clarify",
+        pendingActionId: null,
+        summary: assistantText,
+        draft: null,
+        clarify: null,
+        requiresConfirm: false,
+        sessionId: chatSession.id,
+        messageId: assistantMessage.id
+      });
+      return;
+    }
+
     if (plannedCalls.length === 0) {
       // Read-only chat mode: run the same tool-loop as /api/chat (when OpenAI is configured).
       if (!process.env.OPENAI_API_KEY) {
