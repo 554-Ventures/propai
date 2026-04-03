@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 
@@ -24,6 +24,19 @@ type CashflowTransaction = {
 
 type TabKey = "all" | "income" | "expenses";
 
+function toISODate(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
+function getMonthToDateRange(now = new Date()) {
+  const start = new Date(now);
+  start.setDate(1);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(now);
+  end.setHours(23, 59, 59, 999);
+  return { from: toISODate(start), to: toISODate(end) };
+}
+
 function formatMoney(value: number) {
   return value.toLocaleString(undefined, { style: "currency", currency: "USD" });
 }
@@ -37,6 +50,11 @@ export default function CashflowPage() {
   const [tab, setTab] = useState<TabKey>("all");
   const [transactions, setTransactions] = useState<CashflowTransaction[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
+
+  const mtd = useMemo(() => getMonthToDateRange(), []);
+  const [from, setFrom] = useState(mtd.from);
+  const [to, setTo] = useState(mtd.to);
+  const [propertyId, setPropertyId] = useState<string>("");
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -52,32 +70,54 @@ export default function CashflowPage() {
     notes: ""
   });
 
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      if (from) params.set("from", from);
+      if (to) params.set("to", to);
+      if (propertyId) params.set("propertyId", propertyId);
+      if (tab === "income") params.set("type", "income");
+      if (tab === "expenses") params.set("type", "expense");
+
+      const [tx, props] = await Promise.all([
+        apiFetch<CashflowTransaction[]>(`/cashflow/transactions?${params.toString()}`, { auth: true }),
+        apiFetch<Property[]>("/properties", { auth: true }).catch(() => [])
+      ]);
+      setTransactions(tx);
+      setProperties(props);
+    } catch (err) {
+      setError(friendlyError(err, "We couldn't load cashflow transactions."));
+    } finally {
+      setLoading(false);
+    }
+  }, [from, propertyId, tab, to]);
+
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const [tx, props] = await Promise.all([
-          apiFetch<CashflowTransaction[]>("/cashflow/transactions", { auth: true }),
-          apiFetch<Property[]>("/properties", { auth: true }).catch(() => [])
-        ]);
-        setTransactions(tx);
-        setProperties(props);
-      } catch (err) {
-        setError(friendlyError(err, "We couldn't load cashflow transactions."));
-      } finally {
-        setLoading(false);
-      }
-    };
-
     void load();
-  }, []);
+  }, [load]);
 
-  const filtered = useMemo(() => {
-    if (tab === "income") return transactions.filter((t) => t.type === "INCOME");
-    if (tab === "expenses") return transactions.filter((t) => t.type === "EXPENSE");
-    return transactions;
-  }, [tab, transactions]);
+  const totals = useMemo(() => {
+    const income = transactions
+      .filter((t) => t.type === "INCOME")
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+    const expense = transactions
+      .filter((t) => t.type === "EXPENSE")
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+    return { income, expense, net: income - expense };
+  }, [transactions]);
+
+  const filtersActive = useMemo(() => {
+    return tab !== "all" || propertyId !== "" || from !== mtd.from || to !== mtd.to;
+  }, [from, mtd.from, mtd.to, propertyId, tab, to]);
+
+  const clearFilters = () => {
+    setTab("all");
+    setPropertyId("");
+    setFrom(mtd.from);
+    setTo(mtd.to);
+  };
 
   const updateForm = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -108,12 +148,13 @@ export default function CashflowPage() {
         propertyId: form.propertyId || undefined,
         notes: form.notes || undefined
       };
-      const created = await apiFetch<CashflowTransaction>("/cashflow/transactions", {
+      await apiFetch<CashflowTransaction>("/cashflow/transactions", {
         method: "POST",
         auth: true,
         body: JSON.stringify(payload)
       });
-      setTransactions((prev) => [created, ...prev]);
+      // Re-load so the list stays consistent with the current filters (date range / property / type).
+      await load();
       setModalOpen(false);
       resetForm();
     } catch (err) {
@@ -163,11 +204,76 @@ export default function CashflowPage() {
         ))}
       </div>
 
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <label className="text-xs uppercase tracking-wide text-slate-400">From</label>
+          <input
+            type="date"
+            className="mt-2 w-full rounded-xl border border-slate-800/70 bg-slate-950/40 px-3 py-2 text-sm text-slate-100"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="text-xs uppercase tracking-wide text-slate-400">To</label>
+          <input
+            type="date"
+            className="mt-2 w-full rounded-xl border border-slate-800/70 bg-slate-950/40 px-3 py-2 text-sm text-slate-100"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+          />
+        </div>
+        <div className="min-w-[220px] flex-1">
+          <label className="text-xs uppercase tracking-wide text-slate-400">Property</label>
+          <select
+            className="mt-2 w-full rounded-xl border border-slate-800/70 bg-slate-950/40 px-3 py-2 text-sm text-slate-100"
+            value={propertyId}
+            onChange={(e) => setPropertyId(e.target.value)}
+          >
+            <option value="">All properties</option>
+            {properties.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <Button type="button" variant="secondary" onClick={clearFilters} disabled={!filtersActive || loading}>
+          Clear filters
+        </Button>
+      </div>
+
       {error && (
         <div className="rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-200">
-          {error}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>{error}</div>
+            <Button type="button" variant="secondary" onClick={load} disabled={loading}>
+              Retry
+            </Button>
+          </div>
         </div>
       )}
+
+      <section className="grid gap-3 rounded-2xl border border-slate-800/70 bg-slate-950/40 p-4 sm:grid-cols-3">
+        <div>
+          <div className="text-xs uppercase tracking-wide text-slate-400">Income</div>
+          <div className="mt-1 text-lg font-semibold text-emerald-200">{formatMoney(totals.income)}</div>
+        </div>
+        <div>
+          <div className="text-xs uppercase tracking-wide text-slate-400">Expenses</div>
+          <div className="mt-1 text-lg font-semibold text-rose-200">{formatMoney(totals.expense)}</div>
+        </div>
+        <div>
+          <div className="text-xs uppercase tracking-wide text-slate-400">Net</div>
+          <div
+            className={`mt-1 text-lg font-semibold ${
+              totals.net >= 0 ? "text-emerald-200" : "text-rose-200"
+            }`}
+          >
+            {formatMoney(totals.net)}
+          </div>
+        </div>
+      </section>
 
       <section className="rounded-2xl border border-slate-800/70 bg-slate-950/40">
         <div className="grid grid-cols-[140px_1fr_1fr_44px_140px] gap-3 border-b border-slate-800/70 px-4 py-3 text-xs uppercase tracking-wide text-slate-400">
@@ -180,11 +286,22 @@ export default function CashflowPage() {
 
         {loading ? (
           <div className="px-4 py-6 text-sm text-slate-400">Loading transactions...</div>
-        ) : filtered.length === 0 ? (
-          <div className="px-4 py-6 text-sm text-slate-400">No transactions yet.</div>
+        ) : transactions.length === 0 ? (
+          <div className="px-4 py-6 text-sm text-slate-400">
+            {filtersActive ? (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>No transactions match your current filters.</div>
+                <Button type="button" variant="secondary" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              </div>
+            ) : (
+              "No transactions yet."
+            )}
+          </div>
         ) : (
           <div className="divide-y divide-slate-800/60">
-            {filtered.map((t) => {
+            {transactions.map((t) => {
               const isIncome = t.type === "INCOME";
               const signed = isIncome ? Math.abs(t.amount) : -Math.abs(t.amount);
               const amountLabel = `${signed >= 0 ? "+" : "-"}${formatMoney(Math.abs(signed))}`;

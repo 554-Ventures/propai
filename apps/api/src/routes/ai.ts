@@ -20,6 +20,58 @@ type PlanRequestBody = {
   scope?: {
     propertyId?: string;
   };
+  // When true, this request is an explicit confirmation to execute a pending action.
+  confirm?: boolean;
+  // Optional idempotency key for confirm requests (recommended).
+  clientRequestId?: string;
+};
+
+type ChatRequestBody = {
+  sessionId?: string;
+  message?: string;
+  pendingActionId?: string;
+  scope?: {
+    propertyId?: string;
+  };
+  confirm?: boolean;
+  clientRequestId?: string;
+};
+
+const summarizeSessionTitle = (text: string) => {
+  const trimmed = text.trim();
+  if (!trimmed) return "Chat";
+  return trimmed.length > 60 ? `${trimmed.slice(0, 57)}...` : trimmed;
+};
+
+const ensureChatSession = async (opts: {
+  organizationId: string;
+  userId: string;
+  sessionId?: string;
+  propertyId?: string | null;
+}) => {
+  const { organizationId, userId, sessionId, propertyId } = opts;
+  let session = null as any;
+  if (sessionId) {
+    session = await prisma.chatSession.findFirst({
+      where: { id: sessionId, organizationId, userId }
+    });
+  }
+  if (!session) {
+    session = await prisma.chatSession.create({
+      data: {
+        userId,
+        organizationId,
+        propertyId: propertyId ?? null
+      }
+    });
+  }
+  if (propertyId && session.propertyId !== propertyId) {
+    session = await prisma.chatSession.update({
+      where: { id: session.id },
+      data: { propertyId }
+    });
+  }
+  return session as { id: string; propertyId: string | null };
 };
 
 type ConfirmRequestBody = {
@@ -80,6 +132,65 @@ const computeMissingFields = (toolName: string, args: Record<string, unknown>) =
     if (!has("title")) missing.push("title");
   }
   return missing;
+};
+
+/**
+ * Best-effort follow-up patching for pending actions.
+ *
+ * IMPORTANT: Only apply plain-text fallbacks to fields that are currently missing.
+ * This prevents unrelated follow-ups like "add 4 units" from being mis-applied as
+ * cashflow category/type.
+ */
+const buildPendingArgsPatch = (opts: {
+  toolName: string;
+  currentArgs: Record<string, unknown>;
+  userText: string;
+}): { patch: Record<string, unknown>; unhandledText: boolean } => {
+  const { toolName, currentArgs, userText } = opts;
+  const t = String(userText ?? "").trim();
+  if (!t) return { patch: {}, unhandledText: true };
+
+  // 1) JSON object patch (explicit)
+  if (t.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(t);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return { patch: parsed as Record<string, unknown>, unhandledText: false };
+      }
+    } catch {
+      // fall through to heuristics
+    }
+  }
+
+  // 2) Plain-text fallbacks, limited to *currently missing fields only*
+  const missing = computeMissingFields(toolName, currentArgs);
+  const lower = t.toLowerCase();
+
+  if (toolName === "createCashflowTransaction") {
+    // If only one field is missing, treat the whole text as that field.
+    if (missing.length === 1) {
+      return { patch: { [missing[0]]: t }, unhandledText: false };
+    }
+
+    // Small convenience: accept "expense"/"income" for type, but only when type missing.
+    if (missing.includes("type") && (lower === "expense" || lower === "income")) {
+      return { patch: { type: lower }, unhandledText: false };
+    }
+
+    // If category is missing and user gave a short label-like string, treat it as category.
+    // Avoid phrases that look like a different command.
+    if (missing.includes("category")) {
+      const looksLikeCommand = /\b(add|create|make|new|delete|remove|update|edit)\b/i.test(t);
+      if (!looksLikeCommand && t.length <= 40) {
+        return { patch: { category: t }, unhandledText: false };
+      }
+    }
+
+    return { patch: {}, unhandledText: true };
+  }
+
+  // For non-cashflow tools, we don't have safe plain-text heuristics yet.
+  return { patch: {}, unhandledText: true };
 };
 
 const buildClarifyChoices = async (opts: {
@@ -337,27 +448,22 @@ router.post(
       const call = plan.toolCalls[0];
       const args = { ...(call.args ?? {}) } as Record<string, unknown>;
 
-      let patch: Record<string, unknown> = {};
-      const t = trimmedMessage;
-      if (t.startsWith("{")) {
-        try {
-          patch = JSON.parse(t);
-        } catch {
-          patch = {};
-        }
-      }
+      const { patch, unhandledText } = buildPendingArgsPatch({
+        toolName: call.toolName,
+        currentArgs: args,
+        userText: trimmedMessage
+      });
 
-      // If no structured patch, treat text as category if category missing.
-      if (Object.keys(patch).length === 0 && (args.category == null || String(args.category).trim() === "")) {
-        patch = { category: trimmedMessage };
-      }
-
-      // Small convenience: treat plain "expense"/"income" as type when missing.
-      if (Object.keys(patch).length === 0 && (args.type == null || String(args.type).trim() === "")) {
-        const lower = trimmedMessage.toLowerCase();
-        if (lower === "expense" || lower === "income") {
-          patch = { type: lower };
-        }
+      if (unhandledText && Object.keys(patch).length === 0) {
+        // Don't silently mis-apply unrelated follow-ups. Keep the draft unchanged and ask.
+        const missing = computeMissingFields(call.toolName, args);
+        res.status(409).json({
+          error:
+            missing.length > 0
+              ? `I’m not sure how to apply that to the pending ${call.toolName}. Please provide: ${missing.join(", ")}. You can reply with JSON like {" + missing[0] + ": "..."} or answer one field at a time.`
+              : `I’m not sure how to apply that to the pending ${call.toolName}. If you meant a new action, start a new message without pendingActionId.`
+        });
+        return;
       }
 
       call.args = { ...args, ...patch };
@@ -495,6 +601,492 @@ router.post(
       pendingActionId: created.id,
       plan,
       requiresConfirm: true
+    });
+  })
+);
+
+/**
+ * Unified AI chat endpoint.
+ *
+ * Stable integration contract so the frontend does not need heuristics to decide between plan vs chat.
+ * Response modes:
+ * - chat: normal assistant message (no pending action)
+ * - clarify: pending action exists but missing required fields; includes choices
+ * - draft: pending action ready to confirm
+ * - result: confirm executed; includes tool outputs
+ */
+router.post(
+  "/chat",
+  asyncHandler(async (req, res) => {
+    const organizationId = req.auth?.organizationId;
+    const userId = req.auth?.userId;
+    if (!organizationId || !userId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const { sessionId, message, pendingActionId, scope, confirm, clientRequestId } = req.body as ChatRequestBody;
+    const propertyId = scope?.propertyId ?? null;
+    const chatSession = await ensureChatSession({ organizationId, userId, sessionId, propertyId });
+
+    // CONFIRM path
+    if (confirm) {
+      const id = String(pendingActionId ?? "").trim();
+      if (!id) {
+        res.status(400).json({ error: "pendingActionId is required" });
+        return;
+      }
+
+      const idem = String(clientRequestId ?? "").trim();
+      if (!idem) {
+        res.status(400).json({ error: "clientRequestId is required for confirm" });
+        return;
+      }
+
+      const action = await prisma.aiActionLog.findFirst({ where: { id, organizationId, userId } });
+      if (!action) {
+        res.status(404).json({ error: "Action not found" });
+        return;
+      }
+
+      // Persist the confirm action as a chat message (best-effort)
+      await prisma.chatMessage.create({
+        data: {
+          sessionId: chatSession.id,
+          role: "user",
+          content: "[Confirm action]",
+          metadata: { kind: "ai_confirm", actionId: id } as any
+        }
+      });
+
+      // Idempotency: if we already executed this confirm request, return stored result.
+      const existingExec = await prisma.aiActionExecution.findFirst({
+        where: { actionId: id, clientRequestId: idem, organizationId, userId }
+      });
+      if (existingExec) {
+        if (existingExec.error) {
+          res.status(400).json({ error: existingExec.error });
+          return;
+        }
+        const assistantMessage = await prisma.chatMessage.create({
+          data: {
+            sessionId: chatSession.id,
+            role: "assistant",
+            content: "",
+            metadata: { aiReceipt: { title: "Saved" } } as any
+          }
+        });
+        await prisma.chatSession.update({ where: { id: chatSession.id }, data: { updatedAt: new Date() } });
+
+        res.json({
+          mode: "result",
+          pendingActionId: null,
+          receipt: { title: "Saved" },
+          result: existingExec.result ?? null,
+          sessionId: chatSession.id,
+          messageId: assistantMessage.id
+        });
+        return;
+      }
+
+      if (action.status === "CANCELED") {
+        res.status(409).json({ error: "Action was canceled" });
+        return;
+      }
+
+      if (action.status === "CONFIRMED") {
+        res.json({
+          mode: "result",
+          pendingActionId: null,
+          receipt: { title: "Saved" },
+          result: action.result ?? null
+        });
+        return;
+      }
+
+      if (action.status !== "PENDING") {
+        res.status(409).json({ error: `Action is not pending (status=${action.status})` });
+        return;
+      }
+
+      const payload = action.payload as any;
+      const toolCalls = (payload?.plan?.toolCalls ?? []) as AiPlannedToolCall[];
+      if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
+        await prisma.aiActionLog.update({ where: { id: action.id }, data: { status: "FAILED", error: "No planned tool calls" } });
+        res.status(400).json({ error: "No planned tool calls" });
+        return;
+      }
+
+      try {
+        const result = await prisma.$transaction(async () => {
+          const outputs: unknown[] = [];
+          for (const call of toolCalls) {
+            const toolName = call.toolName as AiActionToolName;
+            if (!supportedActionToolNames.includes(toolName)) {
+              throw new Error(`Tool not permitted: ${String(toolName)}`);
+            }
+            const output = await executeActionTool(toolName, (call.args ?? {}) as Record<string, unknown>, {
+              userId,
+              organizationId
+            });
+            outputs.push({ toolName, output });
+          }
+          return outputs;
+        });
+
+        // Store idempotent execution result
+        await prisma.aiActionExecution.create({
+          data: {
+            organizationId,
+            userId,
+            actionId: action.id,
+            clientRequestId: idem,
+            status: "CONFIRMED",
+            result: result as any
+          }
+        });
+
+        const updated = await prisma.aiActionLog.update({
+          where: { id: action.id },
+          data: { status: "CONFIRMED", result: result as any, error: null }
+        });
+
+        res.json({
+          mode: "result",
+          pendingActionId: null,
+          receipt: { title: "Saved" },
+          result: updated.result,
+          sessionId: chatSession.id
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Action execution failed";
+        try {
+          await prisma.aiActionExecution.create({
+            data: {
+              organizationId,
+              userId,
+              actionId: action.id,
+              clientRequestId: idem,
+              status: "FAILED",
+              error: message
+            }
+          });
+        } catch {
+          // best-effort
+        }
+        await prisma.aiActionLog.update({ where: { id: action.id }, data: { status: "FAILED", error: message } });
+        res.status(400).json({ error: message });
+      }
+
+      return;
+    }
+
+    // PLAN/CHAT path
+    const trimmedMessage = String(message ?? "").trim();
+
+    await prisma.chatMessage.create({
+      data: {
+        sessionId: chatSession.id,
+        role: "user",
+        content: trimmedMessage
+      }
+    });
+
+    // Follow-up / merge into draft when pendingActionId is present.
+    if (pendingActionId) {
+      const id = String(pendingActionId).trim();
+      const existing = await prisma.aiActionLog.findFirst({ where: { id, organizationId, userId } });
+      if (!existing) {
+        res.status(404).json({ error: "Pending action not found" });
+        return;
+      }
+
+      const payload = existing.payload as any;
+      const plan = payload?.plan as AiActionPlan | undefined;
+      if (!plan || !Array.isArray(plan.toolCalls) || plan.toolCalls.length === 0) {
+        res.status(409).json({ error: "Pending action is not planable" });
+        return;
+      }
+
+      const call = plan.toolCalls[0];
+      const args = { ...(call.args ?? {}) } as Record<string, unknown>;
+
+      const { patch, unhandledText } = buildPendingArgsPatch({
+        toolName: call.toolName,
+        currentArgs: args,
+        userText: trimmedMessage
+      });
+
+      if (unhandledText && Object.keys(patch).length === 0) {
+        // Don't silently mis-apply unrelated follow-ups (e.g. "add 4 units").
+        // Leave draft unchanged and ask for explicit field(s).
+        const missing = computeMissingFields(call.toolName, args);
+        const choices = await buildClarifyChoices({ organizationId, toolName: call.toolName, args, missing });
+
+        const assistantMessage = await prisma.chatMessage.create({
+          data: {
+            sessionId: chatSession.id,
+            role: "assistant",
+            content:
+              missing.length > 0
+                ? `I’m not sure how to apply that to the pending ${call.toolName}. Please provide: ${missing.join(", ")}. (You can reply with JSON like {"${missing[0]}": "..."}.)`
+                : `I’m not sure how to apply that to the pending ${call.toolName}. If you meant a new action, start a new message (no pendingActionId).`,
+            metadata: {
+              aiDraft: {
+                planId: existing.id,
+                kind: call.toolName,
+                summary:
+                  missing.length > 0
+                    ? `I still need: ${missing.join(", ")}.`
+                    : plan.summary,
+                fields: args,
+                toolCalls: plan.toolCalls,
+                clarify: missing.length > 0 ? { choices } : undefined
+              }
+            } as any
+          }
+        });
+        await prisma.chatSession.update({ where: { id: chatSession.id }, data: { updatedAt: new Date() } });
+
+        res.json({
+          mode: missing.length > 0 ? "clarify" : "draft",
+          pendingActionId: existing.id,
+          summary:
+            missing.length > 0
+              ? `I still need: ${missing.join(", ")}.`
+              : plan.summary,
+          draft: { kind: call.toolName, fields: args, toolCalls: plan.toolCalls },
+          clarify: missing.length > 0 ? { choices } : undefined,
+          requiresConfirm: missing.length === 0,
+          sessionId: chatSession.id,
+          messageId: assistantMessage.id
+        });
+        return;
+      }
+
+      call.args = { ...args, ...patch };
+
+      await prisma.aiActionLog.update({
+        where: { id: existing.id },
+        data: { payload: { ...payload, plan, lastUserMessage: trimmedMessage } as any }
+      });
+
+      const missing = computeMissingFields(call.toolName, call.args ?? {});
+      if (missing.length > 0) {
+        const choices = await buildClarifyChoices({ organizationId, toolName: call.toolName, args: call.args ?? {}, missing });
+        const assistantMessage = await prisma.chatMessage.create({
+          data: {
+            sessionId: chatSession.id,
+            role: "assistant",
+            content: `I still need: ${missing.join(", ")}.`,
+            metadata: {
+              aiDraft: {
+                planId: existing.id,
+                kind: call.toolName,
+                summary: `I still need: ${missing.join(", ")}.`,
+                fields: call.args ?? {},
+                toolCalls: plan.toolCalls,
+                clarify: { choices }
+              }
+            } as any
+          }
+        });
+        await prisma.chatSession.update({ where: { id: chatSession.id }, data: { updatedAt: new Date() } });
+
+        res.json({
+          mode: "clarify",
+          pendingActionId: existing.id,
+          summary: `I still need: ${missing.join(", ")}.`,
+          draft: { kind: call.toolName, fields: call.args ?? {}, toolCalls: plan.toolCalls },
+          clarify: { choices },
+          sessionId: chatSession.id,
+          messageId: assistantMessage.id
+        });
+        return;
+      }
+
+      const assistantMessage = await prisma.chatMessage.create({
+        data: {
+          sessionId: chatSession.id,
+          role: "assistant",
+          content: "",
+          metadata: {
+            aiDraft: {
+              planId: existing.id,
+              kind: call.toolName,
+              summary: plan.summary,
+              fields: call.args ?? {},
+              toolCalls: plan.toolCalls
+            }
+          } as any
+        }
+      });
+      await prisma.chatSession.update({ where: { id: chatSession.id }, data: { updatedAt: new Date() } });
+
+      res.json({
+        mode: "draft",
+        pendingActionId: existing.id,
+        summary: plan.summary,
+        draft: { kind: call.toolName, fields: call.args ?? {}, toolCalls: plan.toolCalls },
+        requiresConfirm: true,
+        sessionId: chatSession.id,
+        messageId: assistantMessage.id
+      });
+      return;
+    }
+
+    if (!trimmedMessage) {
+      res.status(400).json({ error: "message is required" });
+      return;
+    }
+
+    let plannedCalls = parseMessageToToolCalls(trimmedMessage);
+    let assistantText: string | null = null;
+
+    if (plannedCalls.length === 0 && process.env.OPENAI_API_KEY) {
+      const aiPlan = await planWithOpenAI(trimmedMessage);
+      plannedCalls = aiPlan.planned;
+      assistantText = aiPlan.assistantText || null;
+    }
+
+    if (plannedCalls.length === 0) {
+      const assistantMessage = await prisma.chatMessage.create({
+        data: {
+          sessionId: chatSession.id,
+          role: "assistant",
+          content:
+            assistantText ??
+            "I can help with actions like: log an expense/income, create property, create tenant, create maintenance request. Tell me what you want to do (and include amount/date/category for cashflow when possible)."
+        }
+      });
+      await prisma.chatSession.update({ where: { id: chatSession.id }, data: { updatedAt: new Date() } });
+
+      // IMPORTANT: Never ask for missing write fields in mode=chat.
+      // If we didn't produce a pendingActionId, we must not ask a follow-up that implies we are mid-write.
+      res.json({
+        mode: "chat",
+        pendingActionId: null,
+        message:
+          assistantText ??
+          "I can help with actions like: log an expense/income, create property, create tenant, create maintenance request. Tell me what you want to do (and include amount/date/category for cashflow when possible)."
+        ,
+        sessionId: chatSession.id,
+        messageId: assistantMessage.id
+      });
+      return;
+    }
+
+    if (plannedCalls.length === 1) {
+      const missing = computeMissingFields(plannedCalls[0].toolName, plannedCalls[0].args ?? {});
+      if (missing.length > 0) {
+        const plan: AiActionPlan = {
+          summary: `I need a bit more info: ${missing.join(", ")}.`,
+          toolCalls: plannedCalls
+        };
+
+        const created = await prisma.aiActionLog.create({
+          data: {
+            userId,
+            organizationId,
+            actionType: plannedCalls[0].toolName,
+            status: "PENDING",
+            payload: { message: trimmedMessage, scope: scope ?? null, plan } as any
+          }
+        });
+
+        const choices = await buildClarifyChoices({
+          organizationId,
+          toolName: plannedCalls[0].toolName,
+          args: plannedCalls[0].args ?? {},
+          missing
+        });
+
+        const assistantMessage = await prisma.chatMessage.create({
+          data: {
+            sessionId: chatSession.id,
+            role: "assistant",
+            content: plan.summary,
+            metadata: {
+              aiDraft: {
+                planId: created.id,
+                kind: plannedCalls[0].toolName,
+                summary: plan.summary,
+                fields: plannedCalls[0].args ?? {},
+                toolCalls: plan.toolCalls,
+                clarify: { choices }
+              }
+            } as any
+          }
+        });
+        await prisma.chatSession.update({ where: { id: chatSession.id }, data: { updatedAt: new Date() } });
+
+        // Set a title on first assistant response if the session has no messages yet (best effort)
+        try {
+          await prisma.chatSession.update({
+            where: { id: chatSession.id },
+            data: { /* title field not in schema; ignore if absent */ } as any
+          });
+        } catch {
+          // ignore
+        }
+
+        res.json({
+          mode: "clarify",
+          pendingActionId: created.id,
+          summary: plan.summary,
+          draft: { kind: plannedCalls[0].toolName, fields: plannedCalls[0].args ?? {}, toolCalls: plan.toolCalls },
+          clarify: { choices },
+          sessionId: chatSession.id,
+          messageId: assistantMessage.id
+        });
+        return;
+      }
+    }
+
+    const plan: AiActionPlan = {
+      summary: `Planned ${plannedCalls.length} action${plannedCalls.length === 1 ? "" : "s"}.`,
+      toolCalls: plannedCalls
+    };
+
+    const actionType = plannedCalls.length === 1 ? plannedCalls[0].toolName : "multi";
+
+    const created = await prisma.aiActionLog.create({
+      data: {
+        userId,
+        organizationId,
+        actionType,
+        status: "PENDING",
+        payload: { message: trimmedMessage, scope: scope ?? null, plan } as any
+      }
+    });
+
+    const primary = plan.toolCalls[0];
+    const assistantMessage = await prisma.chatMessage.create({
+      data: {
+        sessionId: chatSession.id,
+        role: "assistant",
+        content: "",
+        metadata: {
+          aiDraft: {
+            planId: created.id,
+            kind: primary?.toolName ?? actionType,
+            summary: plan.summary,
+            fields: primary?.args ?? {},
+            toolCalls: plan.toolCalls
+          }
+        } as any
+      }
+    });
+    await prisma.chatSession.update({ where: { id: chatSession.id }, data: { updatedAt: new Date() } });
+
+    res.json({
+      mode: "draft",
+      pendingActionId: created.id,
+      summary: plan.summary,
+      draft: { kind: primary?.toolName ?? actionType, fields: primary?.args ?? {}, toolCalls: plan.toolCalls },
+      requiresConfirm: true,
+      sessionId: chatSession.id,
+      messageId: assistantMessage.id
     });
   })
 );

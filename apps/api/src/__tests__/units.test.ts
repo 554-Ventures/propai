@@ -83,6 +83,51 @@ describe("units archive/reactivate", () => {
     expect(reactivateRes.body.archivedAt).toBeNull();
   });
 
+  it("lists active vs deactivated units via GET /units?status=...", async () => {
+    const token = await createUserAndToken();
+
+    const propertyRes = await request(app)
+      .post("/properties")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        name: "List Property",
+        addressLine1: "3 Main St",
+        city: "Austin",
+        state: "TX",
+        postalCode: "78701"
+      });
+    expect(propertyRes.status).toBe(201);
+
+    const unitRes = await request(app)
+      .post(`/properties/${propertyRes.body.id}/units`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ label: "C1" });
+    expect(unitRes.status).toBe(201);
+
+    const activeListRes = await request(app)
+      .get("/units?status=active")
+      .set("Authorization", `Bearer ${token}`);
+    expect(activeListRes.status).toBe(200);
+    expect(activeListRes.body.some((u: any) => u.id === unitRes.body.id)).toBe(true);
+
+    const deactivateRes = await request(app)
+      .patch(`/units/${unitRes.body.id}/deactivate`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(deactivateRes.status).toBe(200);
+
+    const deactivatedListRes = await request(app)
+      .get("/units?status=deactivated")
+      .set("Authorization", `Bearer ${token}`);
+    expect(deactivatedListRes.status).toBe(200);
+    expect(deactivatedListRes.body.some((u: any) => u.id === unitRes.body.id)).toBe(true);
+
+    const activeListResAfter = await request(app)
+      .get("/units?status=active")
+      .set("Authorization", `Bearer ${token}`);
+    expect(activeListResAfter.status).toBe(200);
+    expect(activeListResAfter.body.some((u: any) => u.id === unitRes.body.id)).toBe(false);
+  });
+
   it("returns 409 when deactivating a unit with an active lease", async () => {
     const token = await createUserAndToken();
 

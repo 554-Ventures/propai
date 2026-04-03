@@ -6,6 +6,36 @@ import { sendError } from "../utils/api-error.js";
 const router: Router = Router();
 
 router.get(
+  "/units",
+  asyncHandler(async (req, res) => {
+    const statusRaw = (req.query.status as string | undefined) ?? "active";
+    const status = statusRaw.toLowerCase();
+
+    if (status !== "active" && status !== "deactivated") {
+      sendError(res, 400, "VALIDATION_ERROR", "Invalid status. Use active|deactivated");
+      return;
+    }
+
+    const whereArchivedAt = status === "deactivated" ? { not: null } : null;
+
+    const units = await prisma.unit.findMany({
+      where: {
+        organizationId: req.auth?.organizationId,
+        archivedAt: whereArchivedAt
+      },
+      orderBy: status === "deactivated" ? { archivedAt: "desc" } : { createdAt: "desc" },
+      include: {
+        property: {
+          select: { id: true, name: true }
+        }
+      }
+    });
+
+    res.json(units);
+  })
+);
+
+router.get(
   "/properties/:propertyId/units",
   asyncHandler(async (req, res) => {
     const property = await prisma.property.findFirst({
