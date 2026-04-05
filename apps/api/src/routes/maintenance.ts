@@ -2,7 +2,7 @@ import { Router } from "express";
 import prisma from "../lib/prisma.js";
 import { asyncHandler } from "../utils/async-handler.js";
 import { sendError } from "../utils/api-error.js";
-import { Prisma, MaintenanceStatus } from "@prisma/client";
+import { Prisma, MaintenanceStatus, ServiceCategory } from "@prisma/client";
 
 const router: Router = Router();
 
@@ -39,6 +39,15 @@ router.get(
       include: {
         unit: true,
         tenant: true,
+        vendor: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            serviceCategories: true
+          }
+        },
         user: {
           select: {
             id: true,
@@ -142,6 +151,15 @@ router.post(
       include: {
         unit: true,
         tenant: true,
+        vendor: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            serviceCategories: true
+          }
+        },
         user: {
           select: {
             id: true,
@@ -196,6 +214,15 @@ router.patch(
       include: {
         unit: true,
         tenant: true,
+        vendor: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            serviceCategories: true
+          }
+        },
         user: {
           select: {
             id: true,
@@ -407,6 +434,196 @@ router.post(
     };
 
     res.status(201).json(enhancedRequest);
+  })
+);
+
+// PATCH /maintenance/:id/assign-vendor - Assign vendor to maintenance request
+router.patch(
+  "/maintenance/:id/assign-vendor",
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;    
+    const { vendorId } = req.body as { vendorId?: string };
+
+    if (!vendorId) {
+      sendError(res, 400, "VALIDATION_ERROR", "vendorId is required");
+      return;
+    }
+
+    // Check if maintenance request exists and belongs to organization
+    const maintenanceRequest = await prisma.maintenanceRequest.findFirst({
+      where: {
+        id,
+        organizationId: req.auth!.organizationId
+      },
+      include: {
+        vendor: true,
+        property: {
+          select: { name: true }
+        },
+        unit: {
+          select: { label: true }
+        }
+      }
+    });
+
+    if (!maintenanceRequest) {
+      sendError(res, 404, "MAINTENANCE_NOT_FOUND", "Maintenance request not found");
+      return;
+    }
+
+    // Check if vendor exists and belongs to organization
+    const vendor = await prisma.vendor.findFirst({
+      where: {
+        id: vendorId,
+        organizationId: req.auth!.organizationId,
+        isActive: true
+      }
+    });
+
+    if (!vendor) {
+      sendError(res, 404, "VENDOR_NOT_FOUND", "Vendor not found");
+      return;
+    }
+
+    // Update maintenance request with vendor assignment
+    const updatedRequest = await prisma.maintenanceRequest.update({
+      where: { id },
+      data: {
+        vendorId,
+        vendorAssignedAt: new Date(),
+        // Automatically move status to IN_PROGRESS when vendor is assigned
+        status: maintenanceRequest.status === "PENDING" ? "IN_PROGRESS" : maintenanceRequest.status
+      },
+      include: {
+        vendor: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            serviceCategories: true
+          }
+        },
+        unit: true,
+        tenant: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        property: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
+    });
+
+    // Log the vendor assignment action
+    await prisma.aiActionLog.create({
+      data: {
+        userId: req.auth!.userId,
+        organizationId: req.auth!.organizationId,
+        actionType: "vendor_assignment",
+        payload: {
+          maintenanceRequestId: id,
+          vendorId,
+          previousVendorId: maintenanceRequest.vendorId,
+          property: maintenanceRequest.property.name,
+          unit: maintenanceRequest.unit?.label,
+          assignedBy: req.auth!.email
+        },
+        status: "success"
+      }
+    });
+
+    res.json(updatedRequest);
+  })
+);
+
+// PATCH /maintenance/:id/unassign-vendor - Remove vendor assignment
+router.patch(
+  "/maintenance/:id/unassign-vendor",
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    // Check if maintenance request exists and belongs to organization
+    const maintenanceRequest = await prisma.maintenanceRequest.findFirst({
+      where: {
+        id,
+        organizationId: req.auth!.organizationId
+      },
+      include: {
+        vendor: true
+      }
+    });
+
+    if (!maintenanceRequest) {
+      sendError(res, 404, "MAINTENANCE_NOT_FOUND", "Maintenance request not found");
+      return;
+    }
+
+    if (!maintenanceRequest.vendorId) {
+      sendError(res, 400, "VALIDATION_ERROR", "No vendor assigned to this maintenance request");
+      return;
+    }
+
+    // Update maintenance request to remove vendor assignment
+    const updatedRequest = await prisma.maintenanceRequest.update({
+      where: { id },
+      data: {
+        vendorId: null,
+        vendorAssignedAt: null,
+        // Reset status to PENDING when vendor is unassigned, unless it's already completed
+        status: maintenanceRequest.status === "COMPLETED" ? "COMPLETED" : "PENDING"
+      },
+      include: {
+        vendor: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            serviceCategories: true
+          }
+        },
+        unit: true,
+        tenant: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        property: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
+    });
+
+    // Log the vendor unassignment action
+    await prisma.aiActionLog.create({
+      data: {
+        userId: req.auth!.userId,
+        organizationId: req.auth!.organizationId,
+        actionType: "vendor_unassignment",
+        payload: {
+          maintenanceRequestId: id,
+          previousVendorId: maintenanceRequest.vendorId,
+          unassignedBy: req.auth!.email
+        },
+        status: "success"
+      }
+    });
+
+    res.json(updatedRequest);
   })
 );
 

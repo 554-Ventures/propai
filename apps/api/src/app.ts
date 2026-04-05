@@ -19,6 +19,7 @@ import orgInviteRoutes from "./routes/org-invites.js";
 import cashflowRoutes from "./routes/cashflow.js";
 import aiRoutes from "./routes/ai.js";
 import maintenanceRoutes from "./routes/maintenance.js";
+import vendorRoutes from "./routes/vendors.js";
 import { requireAuth } from "./middleware/auth.js";
 import { errorHandler, notFound } from "./middleware/error.js";
 
@@ -40,6 +41,7 @@ app.use("/tenants", requireAuth, tenantRoutes);
 app.use("/", requireAuth, unitRoutes);
 app.use("/", requireAuth, leaseRoutes);
 app.use("/", requireAuth, maintenanceRoutes);
+app.use("/", requireAuth, vendorRoutes);
 app.use("/api/expenses", requireAuth, expenseRoutes);
 app.use("/cashflow", requireAuth, cashflowRoutes);
 app.use("/api/analytics", requireAuth, analyticsRoutes);

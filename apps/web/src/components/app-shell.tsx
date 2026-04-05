@@ -21,14 +21,14 @@ const navSections = [
   {
     title: "Financial Operations",
     items: [
-      { href: "/expenses", label: "Expenses" },
+      { href: "/cashflow", label: "Cashflow" },
       { href: "/documents", label: "Documents" }
     ]
   },
   {
     title: "Operations & Insights",
     items: [
-      { href: "/maintenance", label: "Maintenance" },
+      { href: "/vendors", label: "Vendors" },
       { href: "/analytics", label: "Analytics" },
       { href: "/insights", label: "AI Insights" }
     ]

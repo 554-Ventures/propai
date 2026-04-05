@@ -6,7 +6,7 @@ import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { ServiceCategory, Vendor, serviceCategoryLabels } from "@/lib/types";
 
-export default function MaintenancePage() {
+export default function VendorsPage() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -91,7 +91,7 @@ export default function MaintenancePage() {
             ))}
           </select>
           <Button asChild>
-            <Link href="/maintenance/vendors/new">Add Vendor</Link>
+            <Link href="/vendors/new">Add Vendor</Link>
           </Button>
         </div>
       </div>
@@ -121,7 +121,7 @@ export default function MaintenancePage() {
               </p>
               {!showInactive && (
                 <Button asChild className="mt-4">
-                  <Link href="/maintenance/vendors/new">Add Your First Vendor</Link>
+                  <Link href="/vendors/new">Add Your First Vendor</Link>
                 </Button>
               )}
             </div>
@@ -134,7 +134,7 @@ export default function MaintenancePage() {
             className="rounded-2xl border border-slate-800/70 bg-slate-950/60 p-5"
           >
             <Link
-              href={`/maintenance/vendors/${vendor.id}`}
+              href={`/vendors/${vendor.id}`}
               className="block transition hover:opacity-80"
             >
               <div className="flex items-center justify-between">
@@ -193,4 +193,3 @@ export default function MaintenancePage() {
     </div>
   );
 }
-
