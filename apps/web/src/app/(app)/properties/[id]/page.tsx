@@ -141,7 +141,8 @@ export default function PropertyDetailPage() {
   const [maintenance, setMaintenance] = useState<MaintenanceRequest[]>([]);
   const [maintenanceLoading, setMaintenanceLoading] = useState(false);
   const [maintenanceError, setMaintenanceError] = useState<string | null>(null);
-  const [maintenanceFilter, setMaintenanceFilter] = useState<"ALL" | "PENDING" | "IN_PROGRESS" | "COMPLETED">("ALL");
+  const [maintenanceStatusFilter, setMaintenanceStatusFilter] = useState<"ALL" | "PENDING" | "IN_PROGRESS" | "COMPLETED">("ALL");
+  const [maintenanceUnitFilter, setMaintenanceUnitFilter] = useState<"all" | "property" | string>("all");
   const [showMaintenanceForm, setShowMaintenanceForm] = useState(false);
   const [maintenanceForm, setMaintenanceForm] = useState({
     title: "",
@@ -186,18 +187,34 @@ export default function PropertyDetailPage() {
     }
   }, [propertyId]);
 
-  const loadMaintenance = useCallback(async () => {
+  const loadMaintenance = useCallback(async (statusFilter?: string, unitFilter?: string) => {
     setMaintenanceLoading(true);
     setMaintenanceError(null);
     try {
-      const data = await apiFetch<MaintenanceRequest[]>(`/maintenance?propertyId=${propertyId}`, { auth: true });
+      // Use current filter values if not provided as parameters
+      const status = statusFilter ?? maintenanceStatusFilter;
+      const unit = unitFilter ?? maintenanceUnitFilter;
+      
+      // Build query parameters
+      const params = new URLSearchParams();
+      if (status !== "ALL") {
+        params.append("status", status.toLowerCase());
+      }
+      if (unit !== "all") {
+        params.append("unit", unit);
+      }
+      
+      const queryString = params.toString();
+      const endpoint = `/properties/${propertyId}/maintenance${queryString ? `?${queryString}` : ""}`;
+      
+      const data = await apiFetch<MaintenanceRequest[]>(endpoint, { auth: true });
       setMaintenance(data);
     } catch (err) {
       setMaintenanceError(err instanceof Error ? err.message : "Failed to load maintenance requests");
     } finally {
       setMaintenanceLoading(false);
     }
-  }, [propertyId]);
+  }, [propertyId, maintenanceStatusFilter, maintenanceUnitFilter]);
 
   useEffect(() => {
     if (propertyId) {
@@ -566,11 +583,10 @@ export default function PropertyDetailPage() {
     }
 
     try {
-      await apiFetch("/maintenance", {
+      await apiFetch(`/properties/${propertyId}/maintenance`, {
         method: "POST",
         auth: true,
         body: JSON.stringify({
-          propertyId,
           unitId: maintenanceForm.scope === "unit" ? maintenanceForm.unitId : null,
           title: maintenanceForm.title,
           description: maintenanceForm.description || null,
@@ -578,7 +594,7 @@ export default function PropertyDetailPage() {
         })
       });
       setShowMaintenanceForm(false);
-      await loadMaintenance();
+      await loadMaintenance(); // Refresh with current filters
       showToast("Maintenance request created.");
     } catch (err) {
       setMaintenanceFormError(err instanceof Error ? err.message : "Failed to create maintenance request");
@@ -863,20 +879,52 @@ export default function PropertyDetailPage() {
         {maintenanceError && <p className="mt-4 text-sm text-rose-300">{maintenanceError}</p>}
 
         <div className="mt-6">
-          <div className="flex flex-wrap gap-2 mb-6">
-            {(["ALL", "PENDING", "IN_PROGRESS", "COMPLETED"] as const).map((status) => (
-              <button
-                key={status}
-                className={`rounded-full border px-4 py-2 text-sm ${
-                  maintenanceFilter === status
-                    ? "border-cyan-400/70 bg-cyan-400/10 text-cyan-200"
-                    : "border-slate-700/70 text-slate-300"
-                }`}
-                onClick={() => setMaintenanceFilter(status)}
+          {/* Filter Controls */}
+          <div className="mb-6 space-y-4">
+            {/* Unit Filter Dropdown */}
+            <div>
+              <label className="block text-xs uppercase tracking-wide text-slate-400 mb-2">Filter by Unit</label>
+              <select
+                className="rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-2 text-slate-100 text-sm min-w-[200px]"
+                value={maintenanceUnitFilter}
+                onChange={(e) => {
+                  const newFilter = e.target.value;
+                  setMaintenanceUnitFilter(newFilter);
+                  void loadMaintenance(maintenanceStatusFilter, newFilter);
+                }}
               >
-                {status.replace("_", " ").toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
-              </button>
-            ))}
+                <option value="all">All Units</option>
+                <option value="property">Property-wide Only</option>
+                {units.map((unit) => (
+                  <option key={unit.id} value={unit.id}>
+                    {unit.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            {/* Status Filter Buttons */}
+            <div>
+              <label className="block text-xs uppercase tracking-wide text-slate-400 mb-2">Filter by Status</label>
+              <div className="flex flex-wrap gap-2">
+                {(["ALL", "PENDING", "IN_PROGRESS", "COMPLETED"] as const).map((status) => (
+                  <button
+                    key={status}
+                    className={`rounded-full border px-4 py-2 text-sm ${
+                      maintenanceStatusFilter === status
+                        ? "border-cyan-400/70 bg-cyan-400/10 text-cyan-200"
+                        : "border-slate-700/70 text-slate-300"
+                    }`}
+                    onClick={() => {
+                      setMaintenanceStatusFilter(status);
+                      void loadMaintenance(status, maintenanceUnitFilter);
+                    }}
+                  >
+                    {status.replace("_", " ").toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           {maintenanceLoading ? (
@@ -891,26 +939,40 @@ export default function PropertyDetailPage() {
           ) : (
             <div className="space-y-4">
               {(() => {
-                const filteredMaintenance = maintenance.filter(req => 
-                  maintenanceFilter === "ALL" || req.status === maintenanceFilter
-                );
+                // Client-side filtering is no longer needed since API handles filtering
+                // But we still separate for display organization
+                const propertyWideMaintenance = maintenance.filter(req => !req.unit);
+                const unitSpecificMaintenance = maintenance.filter(req => !!req.unit);
 
-                const propertyWideMaintenance = filteredMaintenance.filter(req => !req.unit);
-                const unitSpecificMaintenance = filteredMaintenance.filter(req => !!req.unit);
-
-                if (filteredMaintenance.length === 0) {
+                if (maintenance.length === 0) {
+                  const filterDescription = [];
+                  if (maintenanceStatusFilter !== "ALL") {
+                    filterDescription.push(`status "${maintenanceStatusFilter.replace("_", " ").toLowerCase()}"`); 
+                  }
+                  if (maintenanceUnitFilter === "property") {
+                    filterDescription.push("property-wide only");
+                  } else if (maintenanceUnitFilter !== "all") {
+                    const unit = units.find(u => u.id === maintenanceUnitFilter);
+                    if (unit) {
+                      filterDescription.push(`unit "${unit.label}" only`);
+                    }
+                  }
+                  
                   return (
                     <div className="text-center py-8 text-slate-400">
-                      No maintenance requests {maintenanceFilter !== "ALL" ? `with status "${maintenanceFilter.replace("_", " ").toLowerCase()}"` : ""} found.
+                      No maintenance requests {filterDescription.length > 0 ? `with ${filterDescription.join(" and ")}` : ""} found.
                     </div>
                   );
                 }
 
                 return (
                   <div className="space-y-8">
-                    {propertyWideMaintenance.length > 0 && (
+                    {propertyWideMaintenance.length > 0 && maintenanceUnitFilter !== "property" && (
                       <div>
-                        <h4 className="text-lg font-medium mb-4">Property-wide</h4>
+                        <h4 className="text-lg font-medium mb-4 flex items-center gap-2">
+                          Property-wide
+                          <span className="text-sm font-normal text-slate-400">({propertyWideMaintenance.length})</span>
+                        </h4>
                         <div className="grid gap-4">
                           {propertyWideMaintenance.map((request) => (
                             <div
@@ -948,9 +1010,12 @@ export default function PropertyDetailPage() {
                       </div>
                     )}
 
-                    {unitSpecificMaintenance.length > 0 && (
+                    {unitSpecificMaintenance.length > 0 && maintenanceUnitFilter === "all" && (
                       <div>
-                        <h4 className="text-lg font-medium mb-4">Unit-specific</h4>
+                        <h4 className="text-lg font-medium mb-4 flex items-center gap-2">
+                          Unit-specific
+                          <span className="text-sm font-normal text-slate-400">({unitSpecificMaintenance.length})</span>
+                        </h4>
                         <div className="grid gap-4">
                           {unitSpecificMaintenance.map((request) => (
                             <div
@@ -964,8 +1029,11 @@ export default function PropertyDetailPage() {
                                     <p className="mt-2 text-sm text-slate-300">{request.description}</p>
                                   )}
                                   <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-400">
-                                    <span>Unit: {request.unit?.label}</span>
+                                    <span className="font-medium text-slate-300">Unit: {request.unit?.label}</span>
                                     <span>Created: {formatDate(request.createdAt)}</span>
+                                    {request.tenant && (
+                                      <span>Tenant: {request.tenant.firstName} {request.tenant.lastName}</span>
+                                    )}
                                     {request.cost && (
                                       <span>Cost: {formatCurrency(request.cost)}</span>
                                     )}
@@ -1525,48 +1593,75 @@ export default function PropertyDetailPage() {
                 />
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wide text-slate-400">Scope</label>
-                <div className="mt-2 flex gap-2">
-                  <button
-                    type="button"
-                    className={`rounded-full border px-4 py-2 text-sm ${
-                      maintenanceForm.scope === "property"
-                        ? "border-cyan-400/70 bg-cyan-400/10 text-cyan-200"
-                        : "border-slate-700/70 text-slate-300"
-                    }`}
-                    onClick={() => setMaintenanceForm((prev) => ({ ...prev, scope: "property", unitId: "" }))}
-                  >
-                    Property-wide
-                  </button>
-                  <button
-                    type="button"
-                    className={`rounded-full border px-4 py-2 text-sm ${
-                      maintenanceForm.scope === "unit"
-                        ? "border-cyan-400/70 bg-cyan-400/10 text-cyan-200"
-                        : "border-slate-700/70 text-slate-300"
-                    }`}
-                    onClick={() => setMaintenanceForm((prev) => ({ ...prev, scope: "unit" }))}
-                  >
-                    Unit-specific
-                  </button>
+                <label className="text-xs uppercase tracking-wide text-slate-400">Applies To</label>
+                <div className="mt-2 space-y-2">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="scope"
+                      value="property"
+                      checked={maintenanceForm.scope === "property"}
+                      onChange={(e) => setMaintenanceForm((prev) => ({ 
+                        ...prev, 
+                        scope: e.target.value as "property" | "unit", 
+                        unitId: "" 
+                      }))}
+                      className="w-4 h-4 text-cyan-500 bg-slate-950 border-slate-700 focus:ring-cyan-500"
+                    />
+                    <span className="text-sm text-slate-300">
+                      <span className="font-medium">Property-wide</span>
+                      <span className="block text-xs text-slate-400">Affects the entire property (e.g., landscaping, roof, HVAC)</span>
+                    </span>
+                  </label>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="scope"
+                      value="unit"
+                      checked={maintenanceForm.scope === "unit"}
+                      onChange={(e) => setMaintenanceForm((prev) => ({ 
+                        ...prev, 
+                        scope: e.target.value as "property" | "unit"
+                      }))}
+                      className="w-4 h-4 text-cyan-500 bg-slate-950 border-slate-700 focus:ring-cyan-500"
+                    />
+                    <span className="text-sm text-slate-300">
+                      <span className="font-medium">Specific Unit</span>
+                      <span className="block text-xs text-slate-400">Affects one unit only (e.g., appliance, plumbing, flooring)</span>
+                    </span>
+                  </label>
                 </div>
               </div>
               {maintenanceForm.scope === "unit" && (
                 <div>
-                  <label className="text-xs uppercase tracking-wide text-slate-400">Unit</label>
+                  <label className="text-xs uppercase tracking-wide text-slate-400">Select Unit</label>
                   <select
                     className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
                     value={maintenanceForm.unitId}
                     onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, unitId: event.target.value }))}
                     required={maintenanceForm.scope === "unit"}
                   >
-                    <option value="">Select unit</option>
-                    {units.map((unit) => (
-                      <option key={unit.id} value={unit.id}>
-                        {unit.label}
-                      </option>
-                    ))}
+                    <option value="">Choose a unit...</option>
+                    {units.map((unit) => {
+                      const tenantInfo = unit.currentLease ? 
+                        ` • ${unit.currentLease.tenant.firstName} ${unit.currentLease.tenant.lastName}` : 
+                        " • Vacant";
+                      const unitDetails = [
+                        unit.bedrooms ? `${unit.bedrooms}br` : "",
+                        unit.bathrooms ? `${unit.bathrooms}ba` : "",
+                        unit.squareFeet ? `${unit.squareFeet}sf` : ""
+                      ].filter(Boolean).join("/");
+                      
+                      return (
+                        <option key={unit.id} value={unit.id}>
+                          {unit.label}{unitDetails ? ` (${unitDetails})` : ""}{tenantInfo}
+                        </option>
+                      );
+                    })}
                   </select>
+                  {units.length === 0 && (
+                    <p className="mt-2 text-xs text-slate-400">No units available. Add units to the property first.</p>
+                  )}
                 </div>
               )}
               <div>
