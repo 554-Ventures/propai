@@ -62,10 +62,10 @@ describe("/ai/chat confirm idempotency (data-layer)", () => {
     const clientRequestId = "req_1";
 
     // First confirm: no existing execution
-    const first = await (prisma as any).aiActionExecution.findFirst({ where: { actionId, clientRequestId, organizationId, userId } });
+    const first = await prisma.aiActionExecution.findFirst({ where: { actionId, clientRequestId, organizationId, userId } });
     expect(first).toBeNull();
 
-    await (prisma as any).aiActionExecution.create({
+    await prisma.aiActionExecution.create({
       data: {
         organizationId,
         userId,
@@ -77,7 +77,7 @@ describe("/ai/chat confirm idempotency (data-layer)", () => {
     });
 
     // Second confirm: should find existing
-    const second = await (prisma as any).aiActionExecution.findFirst({ where: { actionId, clientRequestId, organizationId, userId } });
+    const second = await prisma.aiActionExecution.findFirst({ where: { actionId, clientRequestId, organizationId, userId } });
     expect(second).toBeTruthy();
     expect(second.result[0].output.id).toBe("p1");
   });

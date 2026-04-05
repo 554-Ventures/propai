@@ -207,7 +207,7 @@ describe("properties", () => {
       .set("Authorization", `Bearer ${token}`);
     expect(listRes.status).toBe(200);
 
-    const prop = (listRes.body as any[]).find((p) => p.id === propertyId);
+    const prop = (listRes.body as Array<Record<string, unknown>>).find((p) => p.id === propertyId);
     expect(prop).toBeDefined();
     expect(prop.unitCount).toBe(2);
     expect(prop.vacancyCount).toBe(1);
