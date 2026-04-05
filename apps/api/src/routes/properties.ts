@@ -9,8 +9,13 @@ const router: Router = Router();
 router.get(
   "/",
   asyncHandler(async (req, res) => {
+    const includeArchived = req.query.includeArchived === 'true';
+    
     const rows = await prisma.property.findMany({
-      where: { organizationId: req.auth?.organizationId },
+      where: { 
+        organizationId: req.auth?.organizationId,
+        ...(includeArchived ? {} : { archivedAt: null })
+      },
       orderBy: { createdAt: "desc" },
       include: {
         units: {

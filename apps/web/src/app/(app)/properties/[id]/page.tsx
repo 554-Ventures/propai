@@ -3,9 +3,10 @@
 export const runtime = "edge";
 
 import { useParams, useRouter } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState, useCallback } from "react";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { ArchiveConfirmModal } from "@/components/ArchiveConfirmModal";
 
 type Property = {
   id: string;
@@ -17,6 +18,7 @@ type Property = {
   postalCode: string;
   country: string;
   notes?: string | null;
+  archivedAt?: string | null;
 };
 
 type Tenant = {
@@ -44,6 +46,17 @@ type UnitWithLease = {
   squareFeet?: number | null;
   rent?: number | null;
   currentLease?: Lease | null;
+};
+
+type MaintenanceRequest = {
+  id: string;
+  title: string;
+  description?: string | null;
+  status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
+  cost?: number | null;
+  createdAt: string;
+  unit?: { id: string; label: string } | null;
+  tenant?: { id: string; firstName: string; lastName: string } | null;
 };
 
 const friendlyError = (err: unknown, fallback: string) => {
@@ -119,6 +132,31 @@ export default function PropertyDetailPage() {
   const [editUnitForm, setEditUnitForm] = useState({ label: "", bedrooms: "", bathrooms: "", squareFeet: "", rent: "" });
   const [editUnitSaving, setEditUnitSaving] = useState(false);
   const [editUnitError, setEditUnitError] = useState<string | null>(null);
+  
+  const [editLease, setEditLease] = useState<Lease | null>(null);
+  const [editLeaseForm, setEditLeaseForm] = useState({ rent: "", startDate: "", endDate: "", status: "ACTIVE" });
+  const [editLeaseSaving, setEditLeaseSaving] = useState(false);
+  const [editLeaseError, setEditLeaseError] = useState<string | null>(null);
+
+  const [maintenance, setMaintenance] = useState<MaintenanceRequest[]>([]);
+  const [maintenanceLoading, setMaintenanceLoading] = useState(false);
+  const [maintenanceError, setMaintenanceError] = useState<string | null>(null);
+  const [maintenanceFilter, setMaintenanceFilter] = useState<"ALL" | "PENDING" | "IN_PROGRESS" | "COMPLETED">("ALL");
+  const [showMaintenanceForm, setShowMaintenanceForm] = useState(false);
+  const [maintenanceForm, setMaintenanceForm] = useState({
+    title: "",
+    description: "",
+    scope: "property" as "property" | "unit",
+    unitId: "",
+    cost: ""
+  });
+  const [maintenanceFormSaving, setMaintenanceFormSaving] = useState(false);
+  const [maintenanceFormError, setMaintenanceFormError] = useState<string | null>(null);
+
+  // Archive-related state
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [activeLeaseCount, setActiveLeaseCount] = useState(0);
 
   useEffect(() => {
     const load = async () => {
@@ -135,7 +173,7 @@ export default function PropertyDetailPage() {
     }
   }, [propertyId]);
 
-  const loadUnits = async () => {
+  const loadUnits = useCallback(async () => {
     setUnitsLoading(true);
     setUnitsError(null);
     try {
@@ -146,13 +184,27 @@ export default function PropertyDetailPage() {
     } finally {
       setUnitsLoading(false);
     }
-  };
+  }, [propertyId]);
+
+  const loadMaintenance = useCallback(async () => {
+    setMaintenanceLoading(true);
+    setMaintenanceError(null);
+    try {
+      const data = await apiFetch<MaintenanceRequest[]>(`/maintenance?propertyId=${propertyId}`, { auth: true });
+      setMaintenance(data);
+    } catch (err) {
+      setMaintenanceError(err instanceof Error ? err.message : "Failed to load maintenance requests");
+    } finally {
+      setMaintenanceLoading(false);
+    }
+  }, [propertyId]);
 
   useEffect(() => {
     if (propertyId) {
       void loadUnits();
+      void loadMaintenance();
     }
-  }, [propertyId]);
+  }, [propertyId, loadUnits, loadMaintenance]);
 
   const loadTenants = async () => {
     setTenantsLoading(true);
@@ -207,8 +259,8 @@ export default function PropertyDetailPage() {
     try {
       await apiFetch(`/units/${unitId}/deactivate`, { method: "PATCH", auth: true });
       await loadUnits();
-    } catch (err: any) {
-      const code = err?.code as string | undefined;
+    } catch (err: unknown) {
+      const code = (err as { code?: string; message?: string })?.code;
       if (code === "UNIT_HAS_ACTIVE_LEASE") {
         setUnitsError("This unit has an active lease. End the lease first before deactivating.");
         return;
@@ -418,6 +470,167 @@ export default function PropertyDetailPage() {
     }
   };
 
+  const openEditLease = (lease: Lease) => {
+    setEditLease(lease);
+    setEditLeaseForm({
+      rent: String(lease.rent),
+      startDate: lease.startDate,
+      endDate: lease.endDate ?? "",
+      status: lease.status
+    });
+    setEditLeaseError(null);
+  };
+
+  const submitEditLease = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!editLease) return;
+    setEditLeaseSaving(true);
+    setEditLeaseError(null);
+
+    const patch: Record<string, unknown> = {};
+    const newRent = Number(editLeaseForm.rent);
+    const newStatus = editLeaseForm.status as "DRAFT" | "ACTIVE" | "ENDED";
+    
+    if (newRent !== editLease.rent) patch.rent = newRent;
+    if (editLeaseForm.startDate !== editLease.startDate) patch.startDate = editLeaseForm.startDate;
+    if (editLeaseForm.endDate !== (editLease.endDate ?? "")) {
+      patch.endDate = editLeaseForm.endDate || null;
+    }
+    if (newStatus !== editLease.status) patch.status = newStatus;
+
+    // Validation
+    if (newRent <= 0) {
+      setEditLeaseError("Rent must be a positive number");
+      setEditLeaseSaving(false);
+      return;
+    }
+
+    // Check for significant rent increase (>10%)
+    const rentIncrease = ((newRent - editLease.rent) / editLease.rent) * 100;
+    if (rentIncrease > 10) {
+      if (!confirm(`Warning: This represents a ${rentIncrease.toFixed(1)}% rent increase. This may require tenant notification per local regulations. Continue?`)) {
+        setEditLeaseSaving(false);
+        return;
+      }
+    }
+
+    if (Object.keys(patch).length === 0) {
+      setEditLease(null);
+      setEditLeaseSaving(false);
+      return;
+    }
+
+    try {
+      await apiFetch(`/leases/${editLease.id}`, {
+        method: "PATCH",
+        auth: true,
+        body: JSON.stringify(patch)
+      });
+      setEditLease(null);
+      await loadUnits();
+      showToast("Lease updated.");
+    } catch (err) {
+      setEditLeaseError(err instanceof Error ? err.message : "Failed to update lease");
+    } finally {
+      setEditLeaseSaving(false);
+    }
+  };
+
+  const openMaintenanceForm = () => {
+    setMaintenanceForm({
+      title: "",
+      description: "",
+      scope: "property",
+      unitId: "",
+      cost: ""
+    });
+    setMaintenanceFormError(null);
+    setShowMaintenanceForm(true);
+  };
+
+  const submitMaintenanceRequest = async (event: FormEvent) => {
+    event.preventDefault();
+    setMaintenanceFormSaving(true);
+    setMaintenanceFormError(null);
+
+    if (!maintenanceForm.title) {
+      setMaintenanceFormError("Title is required");
+      setMaintenanceFormSaving(false);
+      return;
+    }
+
+    if (maintenanceForm.scope === "unit" && !maintenanceForm.unitId) {
+      setMaintenanceFormError("Please select a unit for unit-specific requests");
+      setMaintenanceFormSaving(false);
+      return;
+    }
+
+    try {
+      await apiFetch("/maintenance", {
+        method: "POST",
+        auth: true,
+        body: JSON.stringify({
+          propertyId,
+          unitId: maintenanceForm.scope === "unit" ? maintenanceForm.unitId : null,
+          title: maintenanceForm.title,
+          description: maintenanceForm.description || null,
+          cost: maintenanceForm.cost ? Number(maintenanceForm.cost) : null
+        })
+      });
+      setShowMaintenanceForm(false);
+      await loadMaintenance();
+      showToast("Maintenance request created.");
+    } catch (err) {
+      setMaintenanceFormError(err instanceof Error ? err.message : "Failed to create maintenance request");
+    } finally {
+      setMaintenanceFormSaving(false);
+    }
+  };
+
+  // Calculate active lease count
+  useEffect(() => {
+    const activeLeases = units.filter(unit => 
+      unit.currentLease && unit.currentLease.status === "ACTIVE"
+    ).length;
+    setActiveLeaseCount(activeLeases);
+  }, [units]);
+
+  const handleArchiveProperty = async () => {
+    if (!form) return;
+    
+    setArchiveLoading(true);
+    setError(null);
+    
+    try {
+      const endpoint = form.archivedAt 
+        ? `/properties/${propertyId}/unarchive`
+        : `/properties/${propertyId}/archive`;
+      
+      await apiFetch(endpoint, { 
+        method: "POST", 
+        auth: true 
+      });
+      
+      // Refresh property data
+      const data = await apiFetch<Property>(`/properties/${propertyId}`, { auth: true });
+      setForm(data);
+      
+      const action = form.archivedAt ? "unarchived" : "archived";
+      showToast(`Property ${action} successfully.`);
+      
+      setShowArchiveModal(false);
+    } catch (err: unknown) {
+      const code = (err as { code?: string; message?: string })?.code;
+      if (code === "PROPERTY_HAS_ACTIVE_LEASES") {
+        setError("Cannot archive property with active leases. End all leases first.");
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to archive property.");
+      }
+    } finally {
+      setArchiveLoading(false);
+    }
+  };
+
   if (!form) {
     return <p className="text-sm text-slate-400">Loading property...</p>;
   }
@@ -426,12 +639,28 @@ export default function PropertyDetailPage() {
     <div>
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-semibold">{form.name}</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-semibold">{form.name}</h2>
+            {form.archivedAt && (
+              <span className="rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-300">
+                Archived
+              </span>
+            )}
+          </div>
           <p className="text-sm text-slate-400">Update address and portfolio notes.</p>
         </div>
-        <Button variant="destructive" onClick={onDelete} disabled={loading}>
-          Delete
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => setShowArchiveModal(true)}
+            disabled={loading || archiveLoading}
+          >
+            {form.archivedAt ? "Unarchive" : "Archive"}
+          </Button>
+          <Button variant="destructive" onClick={onDelete} disabled={loading}>
+            Delete
+          </Button>
+        </div>
       </div>
 
       <form onSubmit={onSubmit} className="mt-6 grid gap-4 md:grid-cols-2">
@@ -578,9 +807,16 @@ export default function PropertyDetailPage() {
 
                 <div className="mt-4 flex flex-wrap gap-2">
                   {occupied ? (
-                    <Button variant="secondary" onClick={() => setViewLease(lease ?? null)}>
-                      View Lease
-                    </Button>
+                    <>
+                      <Button variant="secondary" onClick={() => setViewLease(lease ?? null)}>
+                        View Lease
+                      </Button>
+                      {lease?.status === "ACTIVE" && (
+                        <Button variant="secondary" onClick={() => openEditLease(lease)}>
+                          Edit Lease
+                        </Button>
+                      )}
+                    </>
                   ) : (
                     <Button onClick={() => openLeaseFlow(unit)}>Add Tenant</Button>
                   )}
@@ -615,6 +851,152 @@ export default function PropertyDetailPage() {
         </div>
       </section>
 
+      <section className="mt-12">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h3 className="text-xl font-semibold">Maintenance</h3>
+            <p className="text-sm text-slate-400">Track maintenance requests and work orders.</p>
+          </div>
+          <Button onClick={openMaintenanceForm}>Create Request</Button>
+        </div>
+
+        {maintenanceError && <p className="mt-4 text-sm text-rose-300">{maintenanceError}</p>}
+
+        <div className="mt-6">
+          <div className="flex flex-wrap gap-2 mb-6">
+            {(["ALL", "PENDING", "IN_PROGRESS", "COMPLETED"] as const).map((status) => (
+              <button
+                key={status}
+                className={`rounded-full border px-4 py-2 text-sm ${
+                  maintenanceFilter === status
+                    ? "border-cyan-400/70 bg-cyan-400/10 text-cyan-200"
+                    : "border-slate-700/70 text-slate-300"
+                }`}
+                onClick={() => setMaintenanceFilter(status)}
+              >
+                {status.replace("_", " ").toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
+              </button>
+            ))}
+          </div>
+
+          {maintenanceLoading ? (
+            <div className="space-y-4">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div
+                  key={`maintenance-loading-${index}`}
+                  className="h-24 animate-pulse rounded-2xl border border-slate-800/60 bg-slate-950/40"
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {(() => {
+                const filteredMaintenance = maintenance.filter(req => 
+                  maintenanceFilter === "ALL" || req.status === maintenanceFilter
+                );
+
+                const propertyWideMaintenance = filteredMaintenance.filter(req => !req.unit);
+                const unitSpecificMaintenance = filteredMaintenance.filter(req => !!req.unit);
+
+                if (filteredMaintenance.length === 0) {
+                  return (
+                    <div className="text-center py-8 text-slate-400">
+                      No maintenance requests {maintenanceFilter !== "ALL" ? `with status "${maintenanceFilter.replace("_", " ").toLowerCase()}"` : ""} found.
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-8">
+                    {propertyWideMaintenance.length > 0 && (
+                      <div>
+                        <h4 className="text-lg font-medium mb-4">Property-wide</h4>
+                        <div className="grid gap-4">
+                          {propertyWideMaintenance.map((request) => (
+                            <div
+                              key={request.id}
+                              className="rounded-2xl border border-slate-800/70 bg-slate-950/60 p-5"
+                            >
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1">
+                                  <h5 className="text-lg font-semibold">{request.title}</h5>
+                                  {request.description && (
+                                    <p className="mt-2 text-sm text-slate-300">{request.description}</p>
+                                  )}
+                                  <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-400">
+                                    <span>Created: {formatDate(request.createdAt)}</span>
+                                    {request.cost && (
+                                      <span>Cost: {formatCurrency(request.cost)}</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <span
+                                  className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+                                    request.status === "COMPLETED"
+                                      ? "bg-emerald-500/20 text-emerald-200"
+                                      : request.status === "IN_PROGRESS"
+                                      ? "bg-yellow-500/20 text-yellow-200"
+                                      : "bg-slate-800/70 text-slate-300"
+                                  }`}
+                                >
+                                  {request.status.replace("_", " ")}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {unitSpecificMaintenance.length > 0 && (
+                      <div>
+                        <h4 className="text-lg font-medium mb-4">Unit-specific</h4>
+                        <div className="grid gap-4">
+                          {unitSpecificMaintenance.map((request) => (
+                            <div
+                              key={request.id}
+                              className="rounded-2xl border border-slate-800/70 bg-slate-950/60 p-5"
+                            >
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1">
+                                  <h5 className="text-lg font-semibold">{request.title}</h5>
+                                  {request.description && (
+                                    <p className="mt-2 text-sm text-slate-300">{request.description}</p>
+                                  )}
+                                  <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-400">
+                                    <span>Unit: {request.unit?.label}</span>
+                                    <span>Created: {formatDate(request.createdAt)}</span>
+                                    {request.cost && (
+                                      <span>Cost: {formatCurrency(request.cost)}</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <span
+                                  className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+                                    request.status === "COMPLETED"
+                                      ? "bg-emerald-500/20 text-emerald-200"
+                                      : request.status === "IN_PROGRESS"
+                                      ? "bg-yellow-500/20 text-yellow-200"
+                                      : "bg-slate-800/70 text-slate-300"
+                                  }`}
+                                >
+                                  {request.status.replace("_", " ")}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Modal dialogs */}
       {showAddUnit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4">
           <div className="w-full max-w-lg rounded-2xl border border-slate-700/70 bg-slate-900/90 p-6 shadow-2xl">
@@ -1034,6 +1416,198 @@ export default function PropertyDetailPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {editLease && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-700/70 bg-slate-900/90 p-6 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h4 className="text-lg font-semibold">Edit Lease</h4>
+              <button
+                className="text-sm text-slate-400 hover:text-slate-200"
+                onClick={() => setEditLease(null)}
+              >
+                Close
+              </button>
+            </div>
+
+            <form onSubmit={submitEditLease} className="mt-4 grid gap-4">
+              <div>
+                <label className="text-xs uppercase tracking-wide text-slate-400">Monthly Rent</label>
+                <input
+                  className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+                  value={editLeaseForm.rent}
+                  onChange={(event) => setEditLeaseForm((prev) => ({ ...prev, rent: event.target.value }))}
+                  type="number"
+                  min="0"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wide text-slate-400">Start Date</label>
+                <input
+                  className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+                  value={editLeaseForm.startDate}
+                  onChange={(event) => setEditLeaseForm((prev) => ({ ...prev, startDate: event.target.value }))}
+                  type="date"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wide text-slate-400">End Date (Optional)</label>
+                <input
+                  className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+                  value={editLeaseForm.endDate}
+                  onChange={(event) => setEditLeaseForm((prev) => ({ ...prev, endDate: event.target.value }))}
+                  type="date"
+                />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wide text-slate-400">Status</label>
+                <select
+                  className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+                  value={editLeaseForm.status}
+                  onChange={(event) => setEditLeaseForm((prev) => ({ ...prev, status: event.target.value }))}
+                >
+                  <option value="DRAFT">Draft</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="ENDED">Ended</option>
+                </select>
+              </div>
+
+              {editLeaseError && <p className="text-sm text-rose-300">{editLeaseError}</p>}
+
+              <div className="flex justify-end gap-2">
+                <Button variant="secondary" type="button" onClick={() => setEditLease(null)}>
+                  Cancel
+                </Button>
+                <Button disabled={editLeaseSaving}>
+                  {editLeaseSaving ? "Saving..." : "Save Changes"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showMaintenanceForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-700/70 bg-slate-900/90 p-6 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h4 className="text-lg font-semibold">Create Maintenance Request</h4>
+              <button
+                className="text-sm text-slate-400 hover:text-slate-200"
+                onClick={() => setShowMaintenanceForm(false)}
+              >
+                Close
+              </button>
+            </div>
+
+            <form onSubmit={submitMaintenanceRequest} className="mt-4 grid gap-4">
+              <div>
+                <label className="text-xs uppercase tracking-wide text-slate-400">Title</label>
+                <input
+                  className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+                  value={maintenanceForm.title}
+                  onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, title: event.target.value }))}
+                  required
+                  placeholder="e.g., Fix leaking faucet"
+                />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wide text-slate-400">Description</label>
+                <textarea
+                  className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+                  rows={3}
+                  value={maintenanceForm.description}
+                  onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, description: event.target.value }))}
+                  placeholder="Additional details..."
+                />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wide text-slate-400">Scope</label>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    className={`rounded-full border px-4 py-2 text-sm ${
+                      maintenanceForm.scope === "property"
+                        ? "border-cyan-400/70 bg-cyan-400/10 text-cyan-200"
+                        : "border-slate-700/70 text-slate-300"
+                    }`}
+                    onClick={() => setMaintenanceForm((prev) => ({ ...prev, scope: "property", unitId: "" }))}
+                  >
+                    Property-wide
+                  </button>
+                  <button
+                    type="button"
+                    className={`rounded-full border px-4 py-2 text-sm ${
+                      maintenanceForm.scope === "unit"
+                        ? "border-cyan-400/70 bg-cyan-400/10 text-cyan-200"
+                        : "border-slate-700/70 text-slate-300"
+                    }`}
+                    onClick={() => setMaintenanceForm((prev) => ({ ...prev, scope: "unit" }))}
+                  >
+                    Unit-specific
+                  </button>
+                </div>
+              </div>
+              {maintenanceForm.scope === "unit" && (
+                <div>
+                  <label className="text-xs uppercase tracking-wide text-slate-400">Unit</label>
+                  <select
+                    className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+                    value={maintenanceForm.unitId}
+                    onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, unitId: event.target.value }))}
+                    required={maintenanceForm.scope === "unit"}
+                  >
+                    <option value="">Select unit</option>
+                    {units.map((unit) => (
+                      <option key={unit.id} value={unit.id}>
+                        {unit.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div>
+                <label className="text-xs uppercase tracking-wide text-slate-400">Estimated Cost (Optional)</label>
+                <input
+                  className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={maintenanceForm.cost}
+                  onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, cost: event.target.value }))}
+                  placeholder="0.00"
+                />
+              </div>
+
+              {maintenanceFormError && <p className="text-sm text-rose-300">{maintenanceFormError}</p>}
+
+              <div className="flex justify-end gap-2">
+                <Button variant="secondary" type="button" onClick={() => setShowMaintenanceForm(false)}>
+                  Cancel
+                </Button>
+                <Button disabled={maintenanceFormSaving}>
+                  {maintenanceFormSaving ? "Creating..." : "Create Request"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showArchiveModal && form && (
+        <ArchiveConfirmModal
+          property={{
+            id: form.id,
+            name: form.name,
+            archivedAt: form.archivedAt
+          }}
+          activeLeaseCount={activeLeaseCount}
+          onClose={() => setShowArchiveModal(false)}
+          onConfirm={handleArchiveProperty}
+        />
       )}
     </div>
   );

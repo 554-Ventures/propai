@@ -306,7 +306,7 @@ const buildClarifyChoices = async (opts: {
     // Property is optional; offer quick picks when user has properties.
     if (args.propertyId == null) {
       const properties = await prisma.property.findMany({
-        where: { organizationId },
+        where: { organizationId, archivedAt: null },
         select: { id: true, name: true },
         orderBy: { createdAt: "desc" }
       });
@@ -325,7 +325,7 @@ const buildClarifyChoices = async (opts: {
   // For maintenance requests, property choice is high-value.
   if (toolName === "createMaintenanceRequest" && missing.includes("propertyId")) {
     const properties = await prisma.property.findMany({
-      where: { organizationId },
+      where: { organizationId, archivedAt: null },
       select: { id: true, name: true },
       orderBy: { createdAt: "desc" }
     });
@@ -341,7 +341,7 @@ const buildClarifyChoices = async (opts: {
   if (missing.includes("id")) {
     if (toolName === "updateProperty" || toolName === "deleteProperty") {
       const properties = await prisma.property.findMany({
-        where: { organizationId },
+        where: { organizationId, archivedAt: null },
         select: { id: true, name: true },
         orderBy: { createdAt: "desc" },
         take: 5
