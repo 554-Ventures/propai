@@ -6,6 +6,17 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Seeding test data...');
 
+  // Create organization first
+  const organization = await prisma.organization.upsert({
+    where: { id: 'demo-org-id' },
+    update: {},
+    create: {
+      id: 'demo-org-id',
+      name: 'Demo Property Management',
+    },
+  });
+  console.log('✅ Organization created:', organization.name);
+
   // Create test user
   const hashedPassword = await bcrypt.hash('Password123!', 10);
   const user = await prisma.user.upsert({
@@ -15,6 +26,7 @@ async function main() {
       email: 'demo@propai.com',
       passwordHash: hashedPassword,
       name: 'Demo User',
+      defaultOrgId: organization.id,
     },
   });
   console.log('✅ User created:', user.email);
@@ -23,6 +35,7 @@ async function main() {
   const property1 = await prisma.property.create({
     data: {
       userId: user.id,
+      organizationId: organization.id,
       name: 'Oak Street Duplex',
       addressLine1: '123 Oak Street',
       city: 'Austin',
@@ -34,6 +47,7 @@ async function main() {
   const property2 = await prisma.property.create({
     data: {
       userId: user.id,
+      organizationId: organization.id,
       name: 'Downtown Apartment Complex',
       addressLine1: '456 Main Avenue',
       city: 'Austin',
@@ -48,6 +62,7 @@ async function main() {
     data: {
       propertyId: property1.id,
       userId: user.id,
+      organizationId: organization.id,
       label: 'Unit A',
       bedrooms: 2,
       bathrooms: 1.5,
@@ -60,6 +75,7 @@ async function main() {
     data: {
       propertyId: property1.id,
       userId: user.id,
+      organizationId: organization.id,
       label: 'Unit B',
       bedrooms: 2,
       bathrooms: 1.5,
@@ -72,6 +88,7 @@ async function main() {
     data: {
       propertyId: property2.id,
       userId: user.id,
+      organizationId: organization.id,
       label: '101',
       bedrooms: 1,
       bathrooms: 1,
@@ -85,6 +102,7 @@ async function main() {
   const tenant1 = await prisma.tenant.create({
     data: {
       userId: user.id,
+      organizationId: organization.id,
       firstName: 'John',
       lastName: 'Smith',
       email: 'john.smith@email.com',
@@ -95,6 +113,7 @@ async function main() {
   const tenant2 = await prisma.tenant.create({
     data: {
       userId: user.id,
+      organizationId: organization.id,
       firstName: 'Sarah',
       lastName: 'Johnson',
       email: 'sarah.j@email.com',
@@ -105,6 +124,7 @@ async function main() {
   const tenant3 = await prisma.tenant.create({
     data: {
       userId: user.id,
+      organizationId: organization.id,
       firstName: 'Mike',
       lastName: 'Davis',
       email: 'mike.davis@email.com',
@@ -118,6 +138,7 @@ async function main() {
   const lease1 = await prisma.lease.create({
     data: {
       userId: user.id,
+      organizationId: organization.id,
       propertyId: property1.id,
       unitId: unit1.id,
       tenantId: tenant1.id,
@@ -130,6 +151,7 @@ async function main() {
   const lease2 = await prisma.lease.create({
     data: {
       userId: user.id,
+      organizationId: organization.id,
       propertyId: property1.id,
       unitId: unit2.id,
       tenantId: tenant2.id,
@@ -142,6 +164,7 @@ async function main() {
   const lease3 = await prisma.lease.create({
     data: {
       userId: user.id,
+      organizationId: organization.id,
       propertyId: property2.id,
       unitId: unit3.id,
       tenantId: tenant3.id,
@@ -162,6 +185,7 @@ async function main() {
         prisma.payment.create({
           data: {
             userId: user.id,
+            organizationId: organization.id,
             propertyId: property1.id,
             leaseId: lease1.id,
             amount: 1500,
@@ -178,6 +202,7 @@ async function main() {
         prisma.payment.create({
           data: {
             userId: user.id,
+            organizationId: organization.id,
             propertyId: property1.id,
             leaseId: lease2.id,
             amount: 1500,
@@ -194,6 +219,7 @@ async function main() {
       prisma.payment.create({
         data: {
           userId: user.id,
+          organizationId: organization.id,
           propertyId: property2.id,
           leaseId: lease3.id,
           amount: 1100,
@@ -211,6 +237,7 @@ async function main() {
     prisma.vendor.create({
       data: {
         userId: user.id,
+        organizationId: organization.id,
         name: 'Austin Energy',
         trade: 'Utilities',
         email: 'billing@austinenergy.com',
@@ -220,6 +247,7 @@ async function main() {
     prisma.vendor.create({
       data: {
         userId: user.id,
+        organizationId: organization.id,
         name: 'Quick Fix Plumbing',
         trade: 'Plumbing',
         email: 'service@quickfixplumbing.com',
@@ -229,6 +257,7 @@ async function main() {
     prisma.vendor.create({
       data: {
         userId: user.id,
+        organizationId: organization.id,
         name: 'Green Thumb Services',
         trade: 'Landscaping',
         email: 'hello@greenthumbservices.com',
@@ -238,6 +267,7 @@ async function main() {
     prisma.vendor.create({
       data: {
         userId: user.id,
+        organizationId: organization.id,
         name: 'State Farm',
         trade: 'Insurance',
         email: 'support@statefarm.com',
@@ -247,6 +277,7 @@ async function main() {
     prisma.vendor.create({
       data: {
         userId: user.id,
+        organizationId: organization.id,
         name: 'City Water Utility',
         trade: 'Utilities',
         email: 'billing@citywater.example',
@@ -256,6 +287,7 @@ async function main() {
     prisma.vendor.create({
       data: {
         userId: user.id,
+        organizationId: organization.id,
         name: 'Travis County Tax Office',
         trade: 'Taxes',
         email: 'taxes@traviscounty.example',
@@ -265,6 +297,7 @@ async function main() {
     prisma.vendor.create({
       data: {
         userId: user.id,
+        organizationId: organization.id,
         name: 'Cool Air HVAC',
         trade: 'HVAC',
         email: 'service@coolairhvac.com',
@@ -289,6 +322,7 @@ async function main() {
     prisma.expense.create({
       data: {
         userId: user.id,
+        organizationId: organization.id,
         propertyId: property1.id,
         vendorId: vendorAustinEnergy.id,
         amount: 126,
@@ -300,6 +334,7 @@ async function main() {
     prisma.expense.create({
       data: {
         userId: user.id,
+        organizationId: organization.id,
         propertyId: property1.id,
         vendorId: vendorQuickFix.id,
         amount: 450,
@@ -311,6 +346,7 @@ async function main() {
     prisma.expense.create({
       data: {
         userId: user.id,
+        organizationId: organization.id,
         propertyId: property1.id,
         vendorId: vendorStateFarm.id,
         amount: 2100,
@@ -322,6 +358,7 @@ async function main() {
     prisma.expense.create({
       data: {
         userId: user.id,
+        organizationId: organization.id,
         propertyId: property1.id,
         vendorId: vendorGreenThumb.id,
         amount: 75,
@@ -335,6 +372,7 @@ async function main() {
     prisma.expense.create({
       data: {
         userId: user.id,
+        organizationId: organization.id,
         propertyId: property2.id,
         vendorId: vendorCityWater.id,
         amount: 90,
@@ -346,6 +384,7 @@ async function main() {
     prisma.expense.create({
       data: {
         userId: user.id,
+        organizationId: organization.id,
         propertyId: property2.id,
         vendorId: vendorTaxOffice.id,
         amount: 1850,
@@ -357,6 +396,7 @@ async function main() {
     prisma.expense.create({
       data: {
         userId: user.id,
+        organizationId: organization.id,
         propertyId: property2.id,
         vendorId: vendorCoolAir.id,
         amount: 350,
@@ -371,6 +411,7 @@ async function main() {
   const chatSession = await prisma.chatSession.create({
     data: {
       userId: user.id,
+      organizationId: organization.id,
       propertyId: property1.id
     }
   });
