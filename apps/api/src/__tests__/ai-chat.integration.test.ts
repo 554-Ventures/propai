@@ -167,7 +167,12 @@ describe("/ai/chat (integration)", () => {
       .send({
         message: JSON.stringify({
           tool: "createTenant",
-          args: { firstName: "Jane", lastName: "Doe" }
+          args: {
+            firstName: "Jane",
+            lastName: "Doe",
+            email: "jane.doe@example.com",
+            phone: "+13125550199"
+          }
         })
       })
       .expect(200);

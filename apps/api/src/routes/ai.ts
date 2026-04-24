@@ -21,6 +21,7 @@ import { extractUsage } from "../security/usage.js";
 import { logAiSecurityEvent } from "../security/security-logger.js";
 import { updateChatSessionRollingSummary } from "../lib/ai/rolling-summary.js";
 import { validateChatToolArgs, validateWriteToolArgs } from "../lib/ai/tool-arg-validators.js";
+import { evaluateAiWritePlanPolicy } from "../security/ai-policy-engine.js";
 
 const router: Router = Router();
 
@@ -48,6 +49,11 @@ type ChatRequestBody = {
 };
 
 const allowedToolNames = new Set(chatToolDefinitions.map((tool) => tool.name));
+const AI_CHAT_CONTRACT_VERSION = "2026-04-23.v1";
+const withChatContractVersion = <T extends Record<string, unknown>>(payload: T) => ({
+  contractVersion: AI_CHAT_CONTRACT_VERSION,
+  ...payload
+});
 
 const buildChatSystemPrompt = (opts: { propertyName?: string | null; sessionSummary?: string | null }) => {
   const { propertyName, sessionSummary } = opts;
@@ -140,7 +146,10 @@ type ClarifyChoiceOption = {
 
 type ClarifyChoice = {
   field: string;
-  options: ClarifyChoiceOption[];
+  inputKind: "single_select" | "multi_select" | "free_text";
+  options?: ClarifyChoiceOption[];
+  allowUserText?: boolean;
+  prompt?: string;
 };
 
 const toISODate = (d: Date) => {
@@ -174,6 +183,8 @@ const computeMissingFields = (toolName: string, args: Record<string, unknown>) =
   } else if (toolName === "createTenant") {
     if (!has("firstName")) missing.push("firstName");
     if (!has("lastName")) missing.push("lastName");
+    if (!has("email")) missing.push("email");
+    if (!has("phone")) missing.push("phone");
   } else if (toolName === "createMaintenanceRequest") {
     if (!has("propertyId")) missing.push("propertyId");
     if (!has("title")) missing.push("title");
@@ -251,6 +262,41 @@ const buildPendingArgsPatch = (opts: {
     return { patch: {}, unhandledText: true };
   }
 
+  if (toolName === "createTenant") {
+    if (missing.length === 1) {
+      return { patch: { [missing[0]]: t }, unhandledText: false };
+    }
+
+    if (missing.includes("firstName") && missing.includes("lastName")) {
+      const parts = t.split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) {
+        return {
+          patch: {
+            firstName: parts[0],
+            lastName: parts.slice(1).join(" ")
+          },
+          unhandledText: false
+        };
+      }
+    }
+
+    if (missing.includes("email")) {
+      const emailMatch = t.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+      if (emailMatch) {
+        return { patch: { email: emailMatch[0] }, unhandledText: false };
+      }
+    }
+
+    if (missing.includes("phone")) {
+      const phoneMatch = t.match(/\+?[0-9][0-9\s().-]{6,}/);
+      if (phoneMatch) {
+        return { patch: { phone: phoneMatch[0].trim() }, unhandledText: false };
+      }
+    }
+
+    return { patch: {}, unhandledText: true };
+  }
+
   // For non-cashflow tools, we don't have safe plain-text heuristics yet.
   return { patch: {}, unhandledText: true };
 };
@@ -262,17 +308,23 @@ const buildClarifyChoices = async (opts: {
   missing: string[];
 }): Promise<ClarifyChoice[]> => {
   const { organizationId, toolName, args, missing } = opts;
-  const choices: ClarifyChoice[] = [];
+  const choicesByField = new Map<string, ClarifyChoice>();
+  const upsertChoice = (choice: ClarifyChoice) => {
+    choicesByField.set(choice.field, choice);
+  };
 
   // Quick picks for cashflow.
   if (toolName === "createCashflowTransaction") {
     if (missing.includes("type")) {
-      choices.push({
+      upsertChoice({
         field: "type",
+        inputKind: "single_select",
         options: [
           { label: "Expense", value: "expense" },
           { label: "Income", value: "income" }
-        ]
+        ],
+        allowUserText: false,
+        prompt: "Choose a cashflow type."
       });
     }
 
@@ -280,18 +332,22 @@ const buildClarifyChoices = async (opts: {
       const today = new Date();
       const yesterday = new Date();
       yesterday.setDate(today.getDate() - 1);
-      choices.push({
+      upsertChoice({
         field: "date",
+        inputKind: "single_select",
         options: [
           { label: "Today", value: toISODate(today) },
           { label: "Yesterday", value: toISODate(yesterday) }
-        ]
+        ],
+        allowUserText: true,
+        prompt: "Choose a date or reply with a specific date in chat."
       });
     }
 
     if (missing.includes("category")) {
-      choices.push({
+      upsertChoice({
         field: "category",
+        inputKind: "single_select",
         options: [
           { label: "Repairs", value: "Repairs" },
           { label: "Utilities", value: "Utilities" },
@@ -299,7 +355,9 @@ const buildClarifyChoices = async (opts: {
           { label: "Insurance", value: "Insurance" },
           { label: "Taxes", value: "Taxes" },
           { label: "HOA", value: "HOA" }
-        ]
+        ],
+        allowUserText: true,
+        prompt: "Choose a category or reply with your own category in chat."
       });
     }
 
@@ -311,12 +369,15 @@ const buildClarifyChoices = async (opts: {
         orderBy: { createdAt: "desc" }
       });
       if (properties.length > 0) {
-        choices.push({
+        upsertChoice({
           field: "propertyId",
+          inputKind: "single_select",
           options: [
             { label: "No property", value: null },
             ...properties.map((p) => ({ label: p.name, value: p.id }))
-          ]
+          ],
+          allowUserText: false,
+          prompt: "Choose a property scope for this transaction."
         });
       }
     }
@@ -330,9 +391,12 @@ const buildClarifyChoices = async (opts: {
       orderBy: { createdAt: "desc" }
     });
     if (properties.length > 0) {
-      choices.push({
+      upsertChoice({
         field: "propertyId",
-        options: properties.map((p) => ({ label: p.name, value: p.id }))
+        inputKind: "single_select",
+        options: properties.map((p) => ({ label: p.name, value: p.id })),
+        allowUserText: false,
+        prompt: "Select which property this maintenance request belongs to."
       });
     }
   }
@@ -347,9 +411,12 @@ const buildClarifyChoices = async (opts: {
         take: 5
       });
       if (properties.length > 0) {
-        choices.push({
+        upsertChoice({
           field: "id",
-          options: properties.map((p) => ({ label: p.name, value: p.id }))
+          inputKind: "single_select",
+          options: properties.map((p) => ({ label: p.name, value: p.id })),
+          allowUserText: true,
+          prompt: "Select a property or reply with the property id in chat."
         });
       }
     }
@@ -362,9 +429,12 @@ const buildClarifyChoices = async (opts: {
         take: 5
       });
       if (tenants.length > 0) {
-        choices.push({
+        upsertChoice({
           field: "id",
-          options: tenants.map((t) => ({ label: `${t.firstName} ${t.lastName}`.trim(), value: t.id }))
+          inputKind: "single_select",
+          options: tenants.map((t) => ({ label: `${t.firstName} ${t.lastName}`.trim(), value: t.id })),
+          allowUserText: true,
+          prompt: "Select a tenant or reply with the tenant id in chat."
         });
       }
     }
@@ -377,12 +447,15 @@ const buildClarifyChoices = async (opts: {
         take: 5
       });
       if (txs.length > 0) {
-        choices.push({
+        upsertChoice({
           field: "id",
+          inputKind: "single_select",
           options: txs.map((t) => ({
             label: `${t.type} $${t.amount} ${t.category} (${toISODate(new Date(t.date))})`,
             value: t.id
-          }))
+          })),
+          allowUserText: true,
+          prompt: "Select a transaction or reply with the transaction id in chat."
         });
       }
     }
@@ -395,15 +468,30 @@ const buildClarifyChoices = async (opts: {
         take: 5
       });
       if (reqs.length > 0) {
-        choices.push({
+        upsertChoice({
           field: "id",
-          options: reqs.map((r) => ({ label: `${r.title} (${r.status})`, value: r.id }))
+          inputKind: "single_select",
+          options: reqs.map((r) => ({ label: `${r.title} (${r.status})`, value: r.id })),
+          allowUserText: true,
+          prompt: "Select a maintenance request or reply with the request id in chat."
         });
       }
     }
   }
 
-  return choices;
+  for (const field of missing) {
+    if (choicesByField.has(field)) continue;
+    upsertChoice({
+      field,
+      inputKind: "free_text",
+      allowUserText: true,
+      prompt: `Reply in chat with ${field}.`
+    });
+  }
+
+  return missing
+    .map((field) => choicesByField.get(field))
+    .filter(Boolean) as ClarifyChoice[];
 };
 
 const buildSystemPrompt = (opts?: { sessionSummary?: string | null; propertyName?: string | null }) => {
@@ -557,9 +645,11 @@ const actionToolDefinitions = [
       additionalProperties: false as const,
       properties: {
         firstName: { type: "string" as const },
-        lastName: { type: "string" as const }
+        lastName: { type: "string" as const },
+        email: { type: "string" as const, description: "Tenant email address" },
+        phone: { type: "string" as const, description: "Tenant phone number" }
       },
-      required: ["firstName", "lastName"] as const
+      required: ["firstName", "lastName", "email", "phone"] as const
     },
     strict: false as const
   },
@@ -709,6 +799,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const organizationId = req.auth?.organizationId;
     const userId = req.auth?.userId;
+    const role = req.auth?.role ?? "MEMBER";
     if (!organizationId || !userId) {
       res.status(401).json({ error: "Unauthorized" });
       return;
@@ -737,6 +828,28 @@ router.post(
       const plan = payload?.plan as AiActionPlan | undefined;
       if (!plan || !Array.isArray(plan.toolCalls) || plan.toolCalls.length === 0) {
         res.status(409).json({ error: "Pending action is not planable" });
+        return;
+      }
+
+      const pendingPlanPolicy = evaluateAiWritePlanPolicy({ role, toolCalls: plan.toolCalls, phase: "plan" });
+      if (!pendingPlanPolicy.allowed) {
+        await logAiSecurityEvent({
+          userId,
+          organizationId,
+          type: "write_policy_blocked",
+          severity: "high",
+          message: "Pending AI write plan blocked by role policy",
+          metadata: {
+            role,
+            phase: "plan",
+            denied: pendingPlanPolicy.denied,
+            toolNames: plan.toolCalls.map((c) => c.toolName)
+          }
+        });
+        res.status(403).json({
+          error: pendingPlanPolicy.denied.reason ?? "Action not allowed by policy",
+          code: "AI_WRITE_POLICY_BLOCKED"
+        });
         return;
       }
 
@@ -779,7 +892,7 @@ router.post(
           missing
         });
 
-        res.json({
+        res.json(withChatContractVersion({
           pendingActionId: existing.id,
           plan: {
             summary: `I still need: ${missing.join(", ")}.`,
@@ -790,15 +903,15 @@ router.post(
             choices
           },
           requiresConfirm: false
-        });
+        }));
         return;
       }
 
-      res.json({
+      res.json(withChatContractVersion({
         pendingActionId: existing.id,
         plan,
         requiresConfirm: true
-      });
+      }));
       return;
     }
 
@@ -814,13 +927,35 @@ router.post(
     }
 
     if (plannedCalls.length === 0) {
-      res.json({
+      res.json(withChatContractVersion({
         pendingActionId: null,
         plan: {
           summary: assistantText ?? "No supported write action detected.",
           toolCalls: []
         },
         requiresConfirm: false
+      }));
+      return;
+    }
+
+    const newPlanPolicy = evaluateAiWritePlanPolicy({ role, toolCalls: plannedCalls, phase: "plan" });
+    if (!newPlanPolicy.allowed) {
+      await logAiSecurityEvent({
+        userId,
+        organizationId,
+        type: "write_policy_blocked",
+        severity: "high",
+        message: "AI write plan blocked by role policy",
+        metadata: {
+          role,
+          phase: "plan",
+          denied: newPlanPolicy.denied,
+          toolNames: plannedCalls.map((c) => c.toolName)
+        }
+      });
+      res.status(403).json({
+        error: newPlanPolicy.denied.reason ?? "Action not allowed by policy",
+        code: "AI_WRITE_POLICY_BLOCKED"
       });
       return;
     }
@@ -855,7 +990,7 @@ router.post(
           missing
         });
 
-        res.json({
+        res.json(withChatContractVersion({
           pendingActionId: created.id,
           plan: {
             summary: plan.summary,
@@ -866,7 +1001,7 @@ router.post(
             choices
           },
           requiresConfirm: false
-        });
+        }));
         return;
       }
     }
@@ -892,11 +1027,11 @@ router.post(
       }
     });
 
-    res.json({
+    res.json(withChatContractVersion({
       pendingActionId: created.id,
       plan,
       requiresConfirm: true
-    });
+    }));
   })
 );
 
@@ -915,6 +1050,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const organizationId = req.auth?.organizationId;
     const userId = req.auth?.userId;
+    const role = req.auth?.role ?? "MEMBER";
     if (!organizationId || !userId) {
       res.status(401).json({ error: "Unauthorized" });
       return;
@@ -978,14 +1114,14 @@ router.post(
           // best-effort
         }
 
-        res.json({
+        res.json(withChatContractVersion({
           mode: "result",
           pendingActionId: null,
           receipt: { title: "Saved" },
           result: existingExec.result ?? null,
           sessionId: chatSession.id,
           messageId: assistantMessage.id
-        });
+        }));
         return;
       }
 
@@ -1010,14 +1146,14 @@ router.post(
           // best-effort
         }
 
-        res.json({
+        res.json(withChatContractVersion({
           mode: "result",
           pendingActionId: null,
           receipt: { title: "Saved" },
           result: action.result ?? null,
           sessionId: chatSession.id,
           messageId: assistantMessage.id
-        });
+        }));
         return;
       }
 
@@ -1031,6 +1167,29 @@ router.post(
       if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
         await prisma.aiActionLog.update({ where: { id: action.id }, data: { status: "FAILED", error: "No planned tool calls" } });
         res.status(400).json({ error: "No planned tool calls" });
+        return;
+      }
+
+      const executePolicy = evaluateAiWritePlanPolicy({ role, toolCalls, phase: "execute" });
+      if (!executePolicy.allowed) {
+        await logAiSecurityEvent({
+          userId,
+          organizationId,
+          sessionId: chatSession.id,
+          type: "write_policy_blocked",
+          severity: "high",
+          message: "AI write execution blocked by role policy",
+          metadata: {
+            role,
+            phase: "execute",
+            denied: executePolicy.denied,
+            toolNames: toolCalls.map((c) => c.toolName)
+          }
+        });
+        res.status(403).json({
+          error: executePolicy.denied.reason ?? "Action not allowed by policy",
+          code: "AI_WRITE_POLICY_BLOCKED"
+        });
         return;
       }
 
@@ -1083,14 +1242,14 @@ router.post(
           // best-effort
         }
 
-        res.json({
+        res.json(withChatContractVersion({
           mode: "result",
           pendingActionId: null,
           receipt: { title: "Saved" },
           result: updated.result,
           sessionId: chatSession.id,
           messageId: assistantMessage.id
-        });
+        }));
       } catch (error) {
         const message = error instanceof Error ? error.message : "Action execution failed";
         try {
@@ -1138,6 +1297,29 @@ router.post(
       const plan = payload?.plan as AiActionPlan | undefined;
       if (!plan || !Array.isArray(plan.toolCalls) || plan.toolCalls.length === 0) {
         res.status(409).json({ error: "Pending action is not planable" });
+        return;
+      }
+
+      const pendingPolicy = evaluateAiWritePlanPolicy({ role, toolCalls: plan.toolCalls, phase: "plan" });
+      if (!pendingPolicy.allowed) {
+        await logAiSecurityEvent({
+          userId,
+          organizationId,
+          sessionId: chatSession.id,
+          type: "write_policy_blocked",
+          severity: "high",
+          message: "Pending AI write action blocked by role policy",
+          metadata: {
+            role,
+            phase: "plan",
+            denied: pendingPolicy.denied,
+            toolNames: plan.toolCalls.map((c) => c.toolName)
+          }
+        });
+        res.status(403).json({
+          error: pendingPolicy.denied.reason ?? "Action not allowed by policy",
+          code: "AI_WRITE_POLICY_BLOCKED"
+        });
         return;
       }
 
@@ -1205,7 +1387,7 @@ router.post(
         });
         await prisma.chatSession.update({ where: { id: chatSession.id }, data: { updatedAt: new Date() } });
 
-        res.json({
+        res.json(withChatContractVersion({
           mode: missing.length > 0 ? "clarify" : "draft",
           pendingActionId: existing.id,
           summary:
@@ -1217,7 +1399,7 @@ router.post(
           requiresConfirm: missing.length === 0,
           sessionId: chatSession.id,
           messageId: assistantMessage.id
-        });
+        }));
         return;
       }
 
@@ -1250,7 +1432,7 @@ router.post(
         });
         await prisma.chatSession.update({ where: { id: chatSession.id }, data: { updatedAt: new Date() } });
 
-        res.json({
+        res.json(withChatContractVersion({
           mode: "clarify",
           pendingActionId: existing.id,
           summary: `I still need: ${missing.join(", ")}.`,
@@ -1258,7 +1440,7 @@ router.post(
           clarify: { choices },
           sessionId: chatSession.id,
           messageId: assistantMessage.id
-        });
+        }));
         return;
       }
 
@@ -1280,7 +1462,7 @@ router.post(
       });
       await prisma.chatSession.update({ where: { id: chatSession.id }, data: { updatedAt: new Date() } });
 
-      res.json({
+      res.json(withChatContractVersion({
         mode: "draft",
         pendingActionId: existing.id,
         summary: plan.summary,
@@ -1288,7 +1470,7 @@ router.post(
         requiresConfirm: true,
         sessionId: chatSession.id,
         messageId: assistantMessage.id
-      });
+      }));
       return;
     }
 
@@ -1338,7 +1520,7 @@ router.post(
           }
         });
         await prisma.chatSession.update({ where: { id: chatSession.id }, data: { updatedAt: new Date() } });
-        res.json({
+        res.json(withChatContractVersion({
           mode: "clarify",
           pendingActionId: null,
           summary: "I need a bit more info to draft the action.",
@@ -1347,7 +1529,7 @@ router.post(
           requiresConfirm: false,
           sessionId: chatSession.id,
           messageId: assistantMessage.id
-        });
+        }));
         return;
       }
 
@@ -1390,7 +1572,7 @@ router.post(
         }
       });
       await prisma.chatSession.update({ where: { id: chatSession.id }, data: { updatedAt: new Date() } });
-      res.json({
+      res.json(withChatContractVersion({
         mode: "clarify",
         pendingActionId: null,
         summary: assistantText,
@@ -1399,7 +1581,7 @@ router.post(
         requiresConfirm: false,
         sessionId: chatSession.id,
         messageId: assistantMessage.id
-      });
+      }));
       return;
     }
 
@@ -1418,13 +1600,13 @@ router.post(
           }
         });
         await prisma.chatSession.update({ where: { id: chatSession.id }, data: { updatedAt: new Date() } });
-        res.json({
+        res.json(withChatContractVersion({
           mode: "chat",
           pendingActionId: null,
           message: fallback,
           sessionId: chatSession.id,
           messageId: assistantMessage.id
-        });
+        }));
         return;
       }
 
@@ -1697,7 +1879,7 @@ router.post(
         // best-effort
       }
 
-      res.json({
+      res.json(withChatContractVersion({
         mode: "chat",
         pendingActionId: null,
         message: safeResponseText,
@@ -1705,6 +1887,29 @@ router.post(
         toolCalls: toolCallLogs,
         sessionId: chatSession.id,
         messageId: assistantMessage.id
+      }));
+      return;
+    }
+
+    const writePlanPolicy = evaluateAiWritePlanPolicy({ role, toolCalls: plannedCalls, phase: "plan" });
+    if (!writePlanPolicy.allowed) {
+      await logAiSecurityEvent({
+        userId,
+        organizationId,
+        sessionId: chatSession.id,
+        type: "write_policy_blocked",
+        severity: "high",
+        message: "AI write plan blocked by role policy",
+        metadata: {
+          role,
+          phase: "plan",
+          denied: writePlanPolicy.denied,
+          toolNames: plannedCalls.map((c) => c.toolName)
+        }
+      });
+      res.status(403).json({
+        error: writePlanPolicy.denied.reason ?? "Action not allowed by policy",
+        code: "AI_WRITE_POLICY_BLOCKED"
       });
       return;
     }
@@ -1763,7 +1968,7 @@ router.post(
           // ignore
         }
 
-        res.json({
+        res.json(withChatContractVersion({
           mode: "clarify",
           pendingActionId: created.id,
           summary: plan.summary,
@@ -1771,7 +1976,7 @@ router.post(
           clarify: { choices },
           sessionId: chatSession.id,
           messageId: assistantMessage.id
-        });
+        }));
         return;
       }
     }
@@ -1812,7 +2017,7 @@ router.post(
     });
     await prisma.chatSession.update({ where: { id: chatSession.id }, data: { updatedAt: new Date() } });
 
-    res.json({
+    res.json(withChatContractVersion({
       mode: "draft",
       pendingActionId: created.id,
       summary: plan.summary,
@@ -1820,7 +2025,7 @@ router.post(
       requiresConfirm: true,
       sessionId: chatSession.id,
       messageId: assistantMessage.id
-    });
+    }));
   })
 );
 

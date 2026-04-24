@@ -120,6 +120,11 @@ export const parseMessageToToolCalls = (message: string): AiPlannedToolCall[] =>
     }
   }
 
+  const allowHeuristicParser = process.env.AI_ENABLE_HEURISTIC_PARSER === "true";
+  if (!allowHeuristicParser) {
+    return [];
+  }
+
   // Heuristic fallback for offline mode (when OPENAI is unavailable):
   // Detect simple cashflow log intents from natural language.
   // Examples:
@@ -497,11 +502,12 @@ export const executeActionTool = async (toolName: AiActionToolName, args: Record
     case "createTenant": {
       const firstName = asString(args.firstName);
       const lastName = asString(args.lastName);
-      if (!firstName || !lastName) {
-        throw new Error("Missing required fields: firstName, lastName");
-      }
       const email = asOptionalString(args.email);
       const phone = asOptionalString(args.phone);
+
+      if (!firstName || !lastName || !email || !phone) {
+        throw new Error("Missing required fields: firstName, lastName, email, phone");
+      }
 
       return prisma.tenant.create({
         data: {
@@ -509,8 +515,8 @@ export const executeActionTool = async (toolName: AiActionToolName, args: Record
           organizationId,
           firstName,
           lastName,
-          email: email ?? undefined,
-          phone: phone ?? undefined
+          email,
+          phone
         }
       });
     }

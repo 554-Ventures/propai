@@ -29,7 +29,15 @@ type Citation = {
 
 type ChoiceOption = {
   label: string;
-  value: string | number | boolean;
+  value: string | number | boolean | null;
+};
+
+type ClarifyChoice = {
+  field: string;
+  inputKind?: "single_select" | "multi_select" | "free_text";
+  options?: Array<ChoiceOption>;
+  allowUserText?: boolean;
+  prompt?: string;
 };
 
 type ToolCallResult = {
@@ -54,7 +62,7 @@ type ChatMessage = {
       toolCalls?: Array<{ toolName: string; args: Record<string, unknown> }>;
       clarify?: {
         missing?: string[];
-        choices: Array<{ field: string; options: Array<ChoiceOption> }>;
+        choices: Array<ClarifyChoice>;
       };
     };
     aiReceipt?: {
@@ -81,6 +89,7 @@ type ChatHistoryResponse = {
 
 type AiChatResponse =
   | {
+      contractVersion?: string;
       mode: "chat";
       pendingActionId: null;
       message: string;
@@ -88,6 +97,7 @@ type AiChatResponse =
       messageId?: string;
     }
   | {
+      contractVersion?: string;
       mode: "clarify";
       pendingActionId: string;
       summary: string;
@@ -98,12 +108,13 @@ type AiChatResponse =
       };
       clarify?: {
         missing?: string[];
-        choices: Array<{ field: string; options: Array<ChoiceOption> }>;
+        choices: Array<ClarifyChoice>;
       };
       sessionId?: string;
       messageId?: string;
     }
   | {
+      contractVersion?: string;
       mode: "draft";
       pendingActionId: string;
       summary: string;
@@ -117,6 +128,7 @@ type AiChatResponse =
       messageId?: string;
     }
   | {
+      contractVersion?: string;
       mode: "result";
       pendingActionId: null;
       receipt?: {
@@ -413,6 +425,7 @@ export default function ChatPane() {
     if (loading) return;
     setError(null);
     setLoading(true);
+    clearPendingAction();
     const previousSession = activeSessionId;
     const previousMessages = messages;
     setMessages([]);
@@ -434,7 +447,7 @@ export default function ChatPane() {
     } finally {
       setLoading(false);
     }
-  }, [activeSessionId, loading, messages, refreshSessions]);
+  }, [activeSessionId, clearPendingAction, loading, messages, refreshSessions]);
 
   const startOver = useCallback(async () => {
     // Convenience: cancel any pending draft first (best-effort), then start a new chat session.
@@ -554,6 +567,8 @@ export default function ChatPane() {
         })
       );
 
+      clearPendingAction();
+
       // Best-effort: notify rest of app to refresh data.
       if (typeof window !== "undefined") {
         const kind = toolName === "createCashflowTransaction" ? "cashflow" : toolName === "createProperty" ? "properties" : "records";
@@ -564,7 +579,7 @@ export default function ChatPane() {
     } finally {
       setConfirmingPlanId(null);
     }
-  }, []);
+  }, [clearPendingAction]);
 
   const cancelDraft = useCallback(async (planId: string) => {
     setError(null);
@@ -591,10 +606,12 @@ export default function ChatPane() {
           };
         })
       );
+
+      clearPendingAction();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to cancel");
     }
-  }, []);
+  }, [clearPendingAction]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -749,25 +766,31 @@ export default function ChatPane() {
                   {msg.metadata.aiDraft.clarify?.choices?.length ? (
                     <div className="space-y-2">
                       {msg.metadata.aiDraft.clarify.choices.map((choice) => (
-                        <div key={choice.field} className="flex flex-wrap items-center gap-2">
-                          <span className="text-[11px] text-muted-foreground">{choice.field}:</span>
-                          {choice.options.map((opt) => (
-                            <button
-                              key={`${choice.field}-${String(opt.value)}`}
-                              onClick={() =>
-                                sendMessage(
-                                  JSON.stringify({
-                                    [choice.field]: opt.value
-                                  })
-                                )
-                              }
-                              className="rounded-full border border-border bg-secondary px-3 py-1 text-xs text-secondary-foreground transition hover:border-primary/70"
-                              disabled={loading}
-                              title={`Set ${choice.field}`}
-                            >
-                              {opt.label}
-                            </button>
-                          ))}
+                        <div key={choice.field} className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[11px] text-muted-foreground">{choice.field}:</span>
+                            {(choice.options ?? []).map((opt) => (
+                              <button
+                                key={`${choice.field}-${String(opt.value)}`}
+                                onClick={() =>
+                                  sendMessage(
+                                    JSON.stringify({
+                                      [choice.field]: opt.value
+                                    })
+                                  )
+                                }
+                                className="rounded-full border border-border bg-secondary px-3 py-1 text-xs text-secondary-foreground transition hover:border-primary/70"
+                                disabled={loading}
+                                title={`Set ${choice.field}`}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                          {choice.prompt ? <p className="text-[11px] text-muted-foreground">{choice.prompt}</p> : null}
+                          {(choice.inputKind === "free_text" || choice.allowUserText) && !(choice.options?.length ?? 0) ? (
+                            <p className="text-[11px] text-muted-foreground">Reply in chat with the value for {choice.field}.</p>
+                          ) : null}
                         </div>
                       ))}
                     </div>
