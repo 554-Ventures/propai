@@ -1,8 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { Button } from "@/components/ui/button";
+import { 
+  Badge,
+  Button,
+  Input,
+  Label,
+  PageHeader,
+  Select,
+  Skeleton,
+  Text
+} from "@/components/ui";
 
 type Property = {
   id: string;
@@ -101,7 +110,7 @@ export default function LeasesPage() {
     );
   };
 
-  const loadLeases = async () => {
+  const loadLeases = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -124,7 +133,7 @@ export default function LeasesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedProperty, statusFilter]);
 
   useEffect(() => {
     void loadProperties();
@@ -133,7 +142,7 @@ export default function LeasesPage() {
 
   useEffect(() => {
     void loadLeases();
-  }, [selectedProperty, statusFilter]);
+  }, [loadLeases]);
 
   const openCreateModal = () => {
     setEditingLease(null);
@@ -275,19 +284,16 @@ export default function LeasesPage() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-semibold">Leases</h2>
-          <p className="text-sm text-slate-400">Manage active and upcoming leases.</p>
-        </div>
-        <Button onClick={openCreateModal}>New Lease</Button>
-      </div>
+      <PageHeader
+        title="Leases"
+        description="Manage active and upcoming leases."
+        action={<Button onClick={openCreateModal}>New Lease</Button>}
+      />
 
-      <div className="mt-6 flex flex-wrap gap-3">
-        <select
-          className="rounded-full border border-slate-700/60 bg-slate-950/60 px-4 py-2 text-sm text-slate-200"
+      <div className="flex flex-wrap gap-3 mb-6">
+        <Select
           value={selectedProperty}
-          onChange={(event) => setSelectedProperty(event.target.value)}
+          onChange={(event) => setSelectedProperty((event.target as HTMLSelectElement).value)}
         >
           <option value="">All Properties</option>
           {properties.map((property) => (
@@ -295,57 +301,79 @@ export default function LeasesPage() {
               {property.name}
             </option>
           ))}
-        </select>
+        </Select>
 
-        <select
-          className="rounded-full border border-slate-700/60 bg-slate-950/60 px-4 py-2 text-sm text-slate-200"
+        <Select
           value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as LeaseStatusFilter)}
+          onChange={(event) => setStatusFilter((event.target as HTMLSelectElement).value as LeaseStatusFilter)}
         >
           <option value="ALL">All Statuses</option>
           <option value="ACTIVE">Active</option>
           <option value="ENDED">Ended</option>
           <option value="DRAFT">Draft</option>
           <option value="EXPIRED">Expired</option>
-        </select>
+        </Select>
       </div>
 
-      {error && <p className="mt-4 text-sm text-rose-300">{error}</p>}
+      {error && <Text variant="error" size="sm" className="mt-4">{error}</Text>}
 
-      <div className="mt-6 overflow-hidden rounded-2xl border border-slate-800/70">
-        <div className="grid grid-cols-7 gap-4 border-b border-slate-800/70 bg-slate-950/70 px-4 py-3 text-xs uppercase tracking-wide text-slate-400">
-          <span>Tenant</span>
-          <span>Property</span>
-          <span>Unit</span>
-          <span>Start</span>
-          <span>End</span>
-          <span>Rent</span>
-          <span>Status</span>
+      <div className="mt-6 overflow-hidden rounded-2xl border border-border">
+        <div className="grid grid-cols-7 gap-4 border-b border-border bg-muted/50 px-4 py-3">
+          <Text variant="muted" size="xs" weight="medium" className="uppercase tracking-wide">Tenant</Text>
+          <Text variant="muted" size="xs" weight="medium" className="uppercase tracking-wide">Property</Text>
+          <Text variant="muted" size="xs" weight="medium" className="uppercase tracking-wide">Unit</Text>
+          <Text variant="muted" size="xs" weight="medium" className="uppercase tracking-wide">Start</Text>
+          <Text variant="muted" size="xs" weight="medium" className="uppercase tracking-wide">End</Text>
+          <Text variant="muted" size="xs" weight="medium" className="uppercase tracking-wide">Rent</Text>
+          <Text variant="muted" size="xs" weight="medium" className="uppercase tracking-wide">Status</Text>
         </div>
-        <div className="divide-y divide-slate-800/70">
+        <div className="divide-y divide-border">
           {loading && (
-            <div className="px-4 py-6 text-sm text-slate-400">Loading leases...</div>
+            <div className="px-4 py-6 space-y-4">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="grid grid-cols-7 gap-4">
+                  <Skeleton size="sm" />
+                  <Skeleton size="sm" />
+                  <Skeleton size="sm" />
+                  <Skeleton size="sm" />
+                  <Skeleton size="sm" />
+                  <Skeleton size="sm" />
+                  <Skeleton size="sm" width="lg" />
+                </div>
+              ))}
+            </div>
           )}
           {!loading && leases.length === 0 && (
-            <div className="px-4 py-6 text-sm text-slate-400">No leases yet.</div>
+            <div className="px-4 py-6">
+              <Text variant="muted" size="sm">No leases yet.</Text>
+            </div>
           )}
           {leases.map((lease) => (
             <div
               key={lease.id}
-              className="grid grid-cols-7 gap-4 px-4 py-4 text-sm text-slate-200"
+              className="grid grid-cols-7 gap-4 px-4 py-4"
             >
-              <span>
+              <Text size="sm">
                 {lease.tenant.firstName} {lease.tenant.lastName}
-              </span>
-              <span>{lease.property.name}</span>
-              <span>{lease.unit.label}</span>
-              <span>{formatDate(lease.startDate)}</span>
-              <span>{formatDate(lease.endDate)}</span>
-              <span>{formatCurrency(lease.rent)}</span>
-              <span className="flex items-center gap-2">
-                <span>{lease.status}</span>
-                {isExpired(lease) && <span className="text-xs text-amber-300">Expired</span>}
-              </span>
+              </Text>
+              <Text size="sm">{lease.property.name}</Text>
+              <Text size="sm">{lease.unit.label}</Text>
+              <Text size="sm">{formatDate(lease.startDate)}</Text>
+              <Text size="sm">{formatDate(lease.endDate)}</Text>
+              <Text size="sm">{formatCurrency(lease.rent)}</Text>
+              <div className="flex items-center gap-2">
+                <Badge 
+                  variant={lease.status === 'ACTIVE' ? 'success' : lease.status === 'ENDED' ? 'secondary' : 'default'}
+                  size="sm"
+                >
+                  {lease.status}
+                </Badge>
+                {isExpired(lease) && (
+                  <Badge variant="warning" size="xs">
+                    Expired
+                  </Badge>
+                )}
+              </div>
               <div className="col-span-7 mt-2 flex flex-wrap gap-2">
                 <Button variant="secondary" onClick={() => setViewLease(lease)}>
                   View
@@ -365,25 +393,29 @@ export default function LeasesPage() {
       </div>
 
       {showLeaseModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4">
-          <div className="w-full max-w-2xl rounded-2xl border border-slate-700/70 bg-slate-900/90 p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-2xl rounded-2xl border border-border bg-card/95 backdrop-blur p-6 shadow-2xl">
             <div className="flex items-center justify-between">
-              <h4 className="text-lg font-semibold">
+              <Text as="h4" size="lg" weight="semibold">
                 {editingLease ? "Edit Lease" : "Create Lease"}
-              </h4>
-              <button
-                className="text-sm text-slate-400 hover:text-slate-200"
+              </Text>
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => setShowLeaseModal(false)}
               >
-                Close
-              </button>
+                <Text variant="muted" size="sm">Close</Text>
+              </Button>
             </div>
 
             <form onSubmit={submitLease} className="mt-4 grid gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
-                <label className="text-xs uppercase tracking-wide text-slate-400">Property</label>
+                <Label htmlFor="propertySelect" required>
+                  Property
+                </Label>
                 <select
-                  className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+                  id="propertySelect"
+                  className="mt-2 w-full rounded-xl border border-input bg-background px-4 py-3 text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                   value={leaseForm.propertyId}
                   onChange={async (event) => {
                     const value = event.target.value;
@@ -406,9 +438,12 @@ export default function LeasesPage() {
               </div>
 
               <div className="md:col-span-2">
-                <label className="text-xs uppercase tracking-wide text-slate-400">Unit</label>
+                <Label htmlFor="unitSelect" required>
+                  Unit
+                </Label>
                 <select
-                  className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+                  id="unitSelect"
+                  className="mt-2 w-full rounded-xl border border-input bg-background px-4 py-3 text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                   value={leaseForm.unitId}
                   onChange={(event) => {
                     const value = event.target.value;
@@ -432,36 +467,33 @@ export default function LeasesPage() {
 
               <div className="md:col-span-2">
                 <div className="flex gap-2">
-                  <button
+                  <Button
                     type="button"
-                    className={`rounded-full border px-4 py-2 text-sm ${
-                      leaseForm.tenantMode === "select"
-                        ? "border-cyan-400/70 bg-cyan-400/10 text-cyan-200"
-                        : "border-slate-700/70 text-slate-300"
-                    }`}
+                    variant={leaseForm.tenantMode === "select" ? "default" : "outline"}
+                    size="sm"
                     onClick={() => setLeaseForm((prev) => ({ ...prev, tenantMode: "select" }))}
                   >
                     Select Tenant
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
-                    className={`rounded-full border px-4 py-2 text-sm ${
-                      leaseForm.tenantMode === "create"
-                        ? "border-cyan-400/70 bg-cyan-400/10 text-cyan-200"
-                        : "border-slate-700/70 text-slate-300"
-                    }`}
+                    variant={leaseForm.tenantMode === "create" ? "default" : "outline"}
+                    size="sm"
                     onClick={() => setLeaseForm((prev) => ({ ...prev, tenantMode: "create" }))}
                   >
                     Create Tenant
-                  </button>
+                  </Button>
                 </div>
               </div>
 
               {leaseForm.tenantMode === "select" ? (
                 <div className="md:col-span-2">
-                  <label className="text-xs uppercase tracking-wide text-slate-400">Tenant</label>
+                  <Label htmlFor="tenantSelect" required>
+                    Tenant
+                  </Label>
                   <select
-                    className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+                    id="tenantSelect"
+                    className="mt-2 w-full rounded-xl border border-input bg-background px-4 py-3 text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                     value={leaseForm.tenantId}
                     onChange={(event) =>
                       setLeaseForm((prev) => ({ ...prev, tenantId: event.target.value }))
@@ -478,53 +510,63 @@ export default function LeasesPage() {
               ) : (
                 <>
                   <div>
-                    <label className="text-xs uppercase tracking-wide text-slate-400">First Name</label>
-                    <input
-                      className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+                    <Label htmlFor="firstName" required>
+                      First Name
+                    </Label>
+                    <Input
+                      id="firstName"
                       value={leaseForm.newTenant.firstName}
                       onChange={(event) =>
                         setLeaseForm((prev) => ({
                           ...prev,
-                          newTenant: { ...prev.newTenant, firstName: event.target.value }
+                          newTenant: { ...prev.newTenant, firstName: (event.target as HTMLInputElement).value }
                         }))
                       }
                     />
                   </div>
                   <div>
-                    <label className="text-xs uppercase tracking-wide text-slate-400">Last Name</label>
-                    <input
-                      className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+                    <Label htmlFor="lastName" required>
+                      Last Name
+                    </Label>
+                    <Input
+                      id="lastName"
                       value={leaseForm.newTenant.lastName}
                       onChange={(event) =>
                         setLeaseForm((prev) => ({
                           ...prev,
-                          newTenant: { ...prev.newTenant, lastName: event.target.value }
+                          newTenant: { ...prev.newTenant, lastName: (event.target as HTMLInputElement).value }
                         }))
                       }
                     />
                   </div>
                   <div>
-                    <label className="text-xs uppercase tracking-wide text-slate-400">Email</label>
-                    <input
-                      className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+                    <Label htmlFor="email">
+                      Email
+                    </Label>
+                    <Input
+                      id="email"
+                      type="email"
                       value={leaseForm.newTenant.email}
                       onChange={(event) =>
                         setLeaseForm((prev) => ({
                           ...prev,
-                          newTenant: { ...prev.newTenant, email: event.target.value }
+                          newTenant: { ...prev.newTenant, email: (event.target as HTMLInputElement).value }
                         }))
                       }
                     />
                   </div>
                   <div>
-                    <label className="text-xs uppercase tracking-wide text-slate-400">Phone</label>
-                    <input
-                      className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+                    <Label htmlFor="phone">
+                      Phone
+                    </Label>
+                    <Input
+                      id="phone"
+                      type="tel"
                       value={leaseForm.newTenant.phone}
                       onChange={(event) =>
                         setLeaseForm((prev) => ({
                           ...prev,
-                          newTenant: { ...prev.newTenant, phone: event.target.value }
+                          newTenant: { ...prev.newTenant, phone: (event.target as HTMLInputElement).value }
                         }))
                       }
                     />
@@ -533,38 +575,47 @@ export default function LeasesPage() {
               )}
 
               <div>
-                <label className="text-xs uppercase tracking-wide text-slate-400">Start Date</label>
-                <input
-                  className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
-                  value={leaseForm.startDate}
-                  onChange={(event) => setLeaseForm((prev) => ({ ...prev, startDate: event.target.value }))}
+                <Label htmlFor="startDate" required>
+                  Start Date
+                </Label>
+                <Input
+                  id="startDate"
                   type="date"
+                  value={leaseForm.startDate}
+                  onChange={(event) => setLeaseForm((prev) => ({ ...prev, startDate: (event.target as HTMLInputElement).value }))}
                   required
                 />
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wide text-slate-400">End Date</label>
-                <input
-                  className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
-                  value={leaseForm.endDate}
-                  onChange={(event) => setLeaseForm((prev) => ({ ...prev, endDate: event.target.value }))}
+                <Label htmlFor="endDate">
+                  End Date
+                </Label>
+                <Input
+                  id="endDate"
                   type="date"
+                  value={leaseForm.endDate}
+                  onChange={(event) => setLeaseForm((prev) => ({ ...prev, endDate: (event.target as HTMLInputElement).value }))}
                 />
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wide text-slate-400">Rent</label>
-                <input
-                  className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
-                  value={leaseForm.rent}
-                  onChange={(event) => setLeaseForm((prev) => ({ ...prev, rent: event.target.value }))}
+                <Label htmlFor="rent">
+                  Rent
+                </Label>
+                <Input
+                  id="rent"
                   type="number"
                   min="0"
+                  value={leaseForm.rent}
+                  onChange={(event) => setLeaseForm((prev) => ({ ...prev, rent: (event.target as HTMLInputElement).value }))}
                 />
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wide text-slate-400">Status</label>
+                <Label htmlFor="status">
+                  Status
+                </Label>
                 <select
-                  className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+                  id="status"
+                  className="mt-2 w-full rounded-xl border border-input bg-background px-4 py-3 text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                   value={leaseForm.status}
                   onChange={(event) => setLeaseForm((prev) => ({ ...prev, status: event.target.value }))}
                 >
@@ -574,7 +625,11 @@ export default function LeasesPage() {
                 </select>
               </div>
 
-              {leaseFormError && <p className="md:col-span-2 text-sm text-rose-300">{leaseFormError}</p>}
+              {leaseFormError && (
+                <div className="md:col-span-2">
+                  <Text variant="error" size="sm">{leaseFormError}</Text>
+                </div>
+              )}
 
               <div className="md:col-span-2 flex justify-end gap-2">
                 <Button type="button" variant="secondary" onClick={() => setShowLeaseModal(false)}>
@@ -588,27 +643,52 @@ export default function LeasesPage() {
       )}
 
       {viewLease && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-slate-700/70 bg-slate-900/90 p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-border bg-card/95 backdrop-blur p-6 shadow-2xl">
             <div className="flex items-center justify-between">
-              <h4 className="text-lg font-semibold">Lease Details</h4>
-              <button
-                className="text-sm text-slate-400 hover:text-slate-200"
+              <Text as="h4" size="lg" weight="semibold">Lease Details</Text>
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => setViewLease(null)}
               >
-                Close
-              </button>
+                <Text variant="muted" size="sm">Close</Text>
+              </Button>
             </div>
-            <div className="mt-4 space-y-2 text-sm text-slate-300">
-              <p>
-                Tenant: {viewLease.tenant.firstName} {viewLease.tenant.lastName}
-              </p>
-              <p>Property: {viewLease.property.name}</p>
-              <p>Unit: {viewLease.unit.label}</p>
-              <p>Start: {formatDate(viewLease.startDate)}</p>
-              <p>End: {formatDate(viewLease.endDate)}</p>
-              <p>Rent: {formatCurrency(viewLease.rent)}</p>
-              <p>Status: {viewLease.status}</p>
+            <div className="mt-4 space-y-3">
+              <div className="flex justify-between items-center">
+                <Text variant="muted" size="sm">Tenant:</Text>
+                <Text size="sm">{viewLease.tenant.firstName} {viewLease.tenant.lastName}</Text>
+              </div>
+              <div className="flex justify-between items-center">
+                <Text variant="muted" size="sm">Property:</Text>
+                <Text size="sm">{viewLease.property.name}</Text>
+              </div>
+              <div className="flex justify-between items-center">
+                <Text variant="muted" size="sm">Unit:</Text>
+                <Text size="sm">{viewLease.unit.label}</Text>
+              </div>
+              <div className="flex justify-between items-center">
+                <Text variant="muted" size="sm">Start Date:</Text>
+                <Text size="sm">{formatDate(viewLease.startDate)}</Text>
+              </div>
+              <div className="flex justify-between items-center">
+                <Text variant="muted" size="sm">End Date:</Text>
+                <Text size="sm">{formatDate(viewLease.endDate)}</Text>
+              </div>
+              <div className="flex justify-between items-center">
+                <Text variant="muted" size="sm">Rent:</Text>
+                <Text size="sm">{formatCurrency(viewLease.rent)}</Text>
+              </div>
+              <div className="flex justify-between items-center">
+                <Text variant="muted" size="sm">Status:</Text>
+                <Badge 
+                  variant={viewLease.status === 'ACTIVE' ? 'success' : viewLease.status === 'ENDED' ? 'secondary' : 'default'}
+                  size="sm"
+                >
+                  {viewLease.status}
+                </Badge>
+              </div>
             </div>
           </div>
         </div>

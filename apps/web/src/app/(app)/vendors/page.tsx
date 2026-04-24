@@ -52,7 +52,7 @@ export default function VendorsPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">Vendor Management</h2>
-          <p className="text-sm text-slate-400">Manage contractors and service providers for maintenance.</p>
+          <p className="text-sm text-muted-foreground">Manage contractors and service providers for maintenance.</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex gap-2">
@@ -60,7 +60,7 @@ export default function VendorsPage() {
               className={`rounded-full border px-4 py-2 text-sm ${
                 !showInactive
                   ? "border-cyan-400/70 bg-cyan-400/10 text-cyan-200"
-                  : "border-slate-700/70 text-slate-300 hover:border-slate-600"
+                  : "border-border text-muted-foreground hover:border-border"
               }`}
               onClick={() => setShowInactive(false)}
             >
@@ -70,7 +70,7 @@ export default function VendorsPage() {
               className={`rounded-full border px-4 py-2 text-sm ${
                 showInactive
                   ? "border-cyan-400/70 bg-cyan-400/10 text-cyan-200"
-                  : "border-slate-700/70 text-slate-300 hover:border-slate-600"
+                  : "border-border text-muted-foreground hover:border-border"
               }`}
               onClick={() => setShowInactive(true)}
             >
@@ -80,7 +80,7 @@ export default function VendorsPage() {
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value as ServiceCategory | "all")}
-            className="rounded-full border border-slate-700/70 bg-slate-950/60 px-4 py-2 text-sm text-slate-300 hover:border-slate-600"
+            className="rounded-full border border-border bg-muted px-4 py-2 text-sm text-muted-foreground hover:border-border"
           >
             <option value="all">All Categories</option>
             {Object.entries(serviceCategoryLabels).map(([key, label]) => (
@@ -101,14 +101,14 @@ export default function VendorsPage() {
           Array.from({ length: 6 }).map((_, index) => (
             <div
               key={`loading-${index}`}
-              className="h-32 animate-pulse rounded-2xl border border-slate-800/60 bg-slate-950/40"
+              className="h-32 animate-pulse rounded-2xl border border-border bg-muted"
             />
           ))}
         
         {!loading && filteredVendors.length === 0 && (
           <div className="col-span-full">
-            <div className="rounded-2xl border border-dashed border-slate-700/70 bg-slate-950/40 p-8 text-center">
-              <h3 className="font-medium text-slate-300">
+            <div className="rounded-2xl border border-dashed border-border bg-muted p-8 text-center">
+              <h3 className="font-medium text-foreground">
                 {showInactive ? "No inactive vendors found" : "No vendors found"}
               </h3>
               <p className="mt-1 text-sm text-slate-400">
@@ -128,18 +128,18 @@ export default function VendorsPage() {
         {filteredVendors.map((vendor) => (
           <div
             key={vendor.id}
-            className="rounded-2xl border border-slate-800/70 bg-slate-950/60 p-5"
+            className="rounded-2xl border border-border bg-card p-5"
           >
             <Link
               href={`/vendors/${vendor.id}`}
               className="block transition hover:opacity-80"
             >
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-slate-100">{vendor.name}</h3>
+                <h3 className="font-semibold text-foreground">{vendor.name}</h3>
                 <span className={`rounded-full px-2 py-1 text-xs ${
                   vendor.isActive 
                     ? "bg-emerald-400/10 text-emerald-300"
-                    : "bg-slate-700/50 text-slate-400"
+                    : "bg-muted text-muted-foreground"
                 }`}>
                   {vendor.isActive ? "Active" : "Inactive"}
                 </span>

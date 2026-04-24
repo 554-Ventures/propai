@@ -22,24 +22,24 @@ export default function DashboardAiChat() {
   };
 
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-indigo-400/30 bg-gradient-to-br from-indigo-600/50 via-slate-950/80 to-cyan-500/30 p-8 shadow-2xl shadow-indigo-500/20">
-      <div className="pointer-events-none absolute -left-10 top-6 h-40 w-40 rounded-full bg-indigo-400/30 blur-3xl" />
-      <div className="pointer-events-none absolute -right-6 -top-10 h-48 w-48 rounded-full bg-cyan-400/30 blur-3xl" />
+    <section className="relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/40 via-card/80 to-accent/30 p-8 shadow-2xl shadow-primary/10">
+      <div className="pointer-events-none absolute -left-10 top-6 h-40 w-40 rounded-full bg-primary/30 blur-3xl" />
+      <div className="pointer-events-none absolute -right-6 -top-10 h-48 w-48 rounded-full bg-accent/30 blur-3xl" />
 
       <div className="relative z-10">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-semibold text-white">Ask PropAI ✨</h2>
-              <span className="rounded-full border border-indigo-200/40 bg-indigo-300/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-indigo-100">
+              <h2 className="text-2xl font-semibold text-foreground">Ask PropAI ✨</h2>
+              <span className="rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-primary">
                 ✨ AI
               </span>
             </div>
-            <p className="mt-2 text-sm text-indigo-100/80">
+            <p className="mt-2 text-sm text-muted-foreground">
               Your AI command center for rent, expenses, leases, and portfolio insight.
             </p>
           </div>
-          <span className="rounded-full border border-cyan-200/30 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100">
+          <span className="rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-xs text-accent-foreground">
             Magical answers, instantly
           </span>
         </div>
@@ -56,11 +56,11 @@ export default function DashboardAiChat() {
                 }
               }}
               placeholder="Ask anything about your portfolio..."
-              className="w-full rounded-2xl border border-indigo-200/30 bg-slate-950/70 px-4 py-3 text-sm text-white placeholder:text-indigo-200/60 focus:border-cyan-300/70 focus:outline-none"
+              className="w-full rounded-2xl border border-border bg-card px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/70 focus:outline-none"
             />
           </div>
           <Button
-            className="h-12 rounded-2xl bg-gradient-to-r from-indigo-500 via-blue-500 to-cyan-400 text-sm text-white shadow-lg shadow-cyan-500/30"
+            className="h-12 rounded-2xl bg-gradient-to-r from-primary via-primary to-accent text-sm text-primary-foreground shadow-lg shadow-primary/20"
             onClick={() => handleSend(input)}
           >
             Send to PropAI
@@ -72,7 +72,7 @@ export default function DashboardAiChat() {
             <button
               key={question}
               onClick={() => handleSend(question)}
-              className="rounded-full border border-indigo-200/30 bg-slate-950/60 px-4 py-2 text-xs text-indigo-100 transition hover:border-cyan-300/70 hover:text-white"
+              className="rounded-full border border-border bg-card px-4 py-2 text-xs text-muted-foreground transition hover:border-primary/70 hover:text-foreground"
             >
               {question}
             </button>

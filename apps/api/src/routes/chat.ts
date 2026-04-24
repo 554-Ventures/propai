@@ -141,7 +141,7 @@ router.post(
         role: "system",
         content: buildSystemPrompt({
           propertyName: session.property?.name ?? null,
-          sessionSummary: (session as any).summary ?? null
+          sessionSummary: (session as { summary?: string }).summary ?? null
         })
       },
       ...orderedMessages.map((msg) => ({ role: msg.role as "user" | "assistant", content: msg.content }))
@@ -414,7 +414,7 @@ router.get(
 
     res.json({
       sessionId: session.id,
-      messages: messages.map((message: any) => ({
+      messages: messages.map((message) => ({
         id: message.id,
         role: message.role,
         content: message.content,
@@ -443,8 +443,8 @@ router.get(
     res.json(
       sessions.map((session) => ({
         id: session.id,
-        title: (session as any).title ?? null,
-        summary: (session as any).summary ?? null,
+        title: (session as { title?: string }).title ?? null,
+        summary: (session as { summary?: string }).summary ?? null,
         propertyId: session.propertyId,
         property: session.property,
         createdAt: session.createdAt,
@@ -483,8 +483,8 @@ router.post(
 
     res.status(201).json({
       id: session.id,
-      title: (session as any).title ?? null,
-      summary: (session as any).summary ?? null,
+      title: (session as { title?: string }).title ?? null,
+      summary: (session as { summary?: string }).summary ?? null,
       propertyId: session.propertyId,
       property: session.property,
       createdAt: session.createdAt,

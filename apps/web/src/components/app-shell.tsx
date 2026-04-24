@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "./ui/button";
 import { useAuth } from "./auth-provider";
+import { ThemeToggle } from "./theme-toggle";
 import ChatPane from "./chat-pane";
 import { CHAT_OPEN_EVENT } from "../lib/chat-events";
 
@@ -139,7 +140,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   return (
-    <div className="h-screen bg-slate-950 text-slate-100">
+    <div className="h-screen bg-background text-foreground">
       <div className="pointer-events-none fixed inset-0">
         <div className="absolute -top-32 left-10 h-80 w-80 rounded-full bg-cyan-500/20 blur-3xl" />
         <div className="absolute bottom-0 right-0 h-96 w-96 rounded-full bg-emerald-400/10 blur-3xl" />
@@ -147,13 +148,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="relative flex h-full w-full overflow-hidden">
         {/* Left nav */}
-        <aside className="hidden w-64 flex-col border-r border-slate-800/60 bg-slate-950/40 lg:flex">
+        <aside className="hidden w-64 flex-col border-r border-border bg-sidebar lg:flex">
           <div className="px-5 pb-4 pt-6">
-            <p className="text-xs uppercase tracking-[0.3em] text-cyan-300/70">PropAI</p>
+            <p className="text-xs uppercase tracking-[0.3em] text-cyan-500/70">PropAI</p>
             <h1 className="mt-1 text-lg font-semibold">Portfolio</h1>
             {org?.name ? (
-              <p className="mt-2 text-xs text-slate-400">
-                Org: <span className="text-slate-200">{org.name}</span>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Org: <span className="text-foreground">{org.name}</span>
               </p>
             ) : null}
           </div>
@@ -161,7 +162,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <nav className="flex flex-1 flex-col gap-1 px-3 pb-4">
             {navSections.map((section) => (
               <div key={section.title} className="mb-4">
-                <h2 className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <h2 className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {section.title}
                 </h2>
                 <div className="space-y-1">
@@ -173,8 +174,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         href={item.href}
                         className={`block rounded-xl px-3 py-2 text-sm transition ${
                           active
-                            ? "bg-cyan-400/10 text-cyan-200"
-                            : "text-slate-300 hover:bg-slate-900/40 hover:text-slate-100"
+                            ? "bg-cyan-500/10 text-cyan-400"
+                            : "text-muted-foreground hover:bg-accent hover:text-foreground"
                         }`}
                       >
                         {item.label}
@@ -186,34 +187,38 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
 
-          <div className="border-t border-slate-800/60 px-4 py-4">
+          <div className="border-t border-border px-4 py-4">
             {user ? (
               <div className="relative">
                 <button
-                  className="flex w-full items-center gap-3 rounded-2xl border border-slate-800/70 bg-slate-900/40 px-3 py-2 text-left text-sm text-slate-200 transition hover:border-cyan-400/60"
+                  className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card px-3 py-2 text-left text-sm text-foreground transition hover:border-cyan-500/60"
                   onClick={() => setMenuOpen((prev) => !prev)}
                 >
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-400/20 text-xs font-semibold text-cyan-200">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-500/20 text-xs font-semibold text-cyan-400">
                     {initials}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs text-slate-400">{user.email}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{user.email}</span>
                     <span className="block truncate text-sm">{user.name ?? "Account"}</span>
                   </span>
                 </button>
                 {menuOpen && (
-                  <div className="absolute bottom-14 left-0 w-full rounded-2xl border border-slate-700/70 bg-slate-950/90 p-2 text-sm shadow-xl">
-                    <div className="px-3 py-2 text-xs text-slate-400">Account</div>
+                  <div className="absolute bottom-14 left-0 w-full rounded-2xl border border-border bg-popover p-2 text-sm shadow-xl">
+                    <div className="px-3 py-2 text-xs text-muted-foreground">Account</div>
+                    <div className="flex items-center justify-between px-3 py-2">
+                      <span className="text-sm text-foreground">Theme</span>
+                      <ThemeToggle />
+                    </div>
                     {(role === "OWNER" || role === "ADMIN") && (
                       <Link
                         href="/settings/org"
-                        className="block rounded-xl px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-slate-800/40"
+                        className="block rounded-xl px-3 py-2 text-left text-sm text-foreground transition hover:bg-accent"
                       >
                         Org Settings
                       </Link>
                     )}
                     <button
-                      className="w-full rounded-xl px-3 py-2 text-left text-sm text-rose-200 transition hover:bg-rose-500/10"
+                      className="w-full rounded-xl px-3 py-2 text-left text-sm text-red-500 transition hover:bg-red-500/10"
                       onClick={logout}
                     >
                       Sign out
@@ -232,14 +237,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {/* Center */}
         <div className="relative flex min-w-0 flex-1 flex-col">
           {/* Mobile top bar */}
-          <div className="flex items-center justify-between border-b border-slate-800/60 bg-slate-950/40 px-4 py-3 lg:hidden">
+          <div className="flex items-center justify-between border-b border-border bg-sidebar px-4 py-3 lg:hidden">
             <div className="min-w-0">
-              <p className="text-xs uppercase tracking-[0.3em] text-cyan-300/70">PropAI</p>
-              <p className="truncate text-sm text-slate-200">{org?.name ?? "Portfolio"}</p>
+              <p className="text-xs uppercase tracking-[0.3em] text-cyan-500/70">PropAI</p>
+              <p className="truncate text-sm text-foreground">{org?.name ?? "Portfolio"}</p>
             </div>
             <div className="flex items-center gap-2">
+              <ThemeToggle />
               <button
-                className="rounded-xl border border-slate-800/70 bg-slate-900/40 px-3 py-2 text-xs text-slate-200"
+                className="rounded-xl border border-border bg-card px-3 py-2 text-xs text-foreground"
                 onClick={() => {
                   setAssistantCollapsed(false);
                   setDrawerOpen(true);
@@ -251,7 +257,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <main className="min-w-0 flex-1 overflow-y-auto px-4 py-6 lg:px-8 lg:py-8">
-            <div className="mx-auto w-full max-w-5xl rounded-3xl border border-slate-800/70 bg-slate-900/40 p-6 shadow-2xl shadow-black/40">
+            <div className="mx-auto w-full max-w-5xl rounded-3xl border border-border bg-card p-6 shadow-2xl shadow-black/10 dark:shadow-black/40">
               {children}
             </div>
           </main>
@@ -259,7 +265,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {/* Desktop collapsed assistant reopen affordance */}
           {isLgUp && assistantCollapsed && (
             <button
-              className="absolute right-3 top-3 rounded-2xl border border-slate-800/70 bg-slate-900/40 px-3 py-2 text-xs text-slate-200 hover:border-cyan-400/60"
+              className="absolute right-3 top-3 rounded-2xl border border-border bg-card px-3 py-2 text-xs text-foreground hover:border-cyan-500/60"
               onClick={() => setAssistantCollapsed(false)}
             >
               Open Assistant
@@ -278,23 +284,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             role="separator"
             aria-label="Resize assistant panel"
           >
-            <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-slate-800/70 transition group-hover:bg-cyan-400/60" />
+            <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition group-hover:bg-cyan-500/60" />
           </div>
         )}
 
         {/* Right assistant (desktop docked) */}
         {isLgUp && !assistantCollapsed && (
           <aside
-            className="flex h-full flex-col border-l border-slate-800/60 bg-slate-950/40"
+            className="flex h-full flex-col border-l border-border bg-sidebar"
             style={{ width: assistantWidth }}
           >
-            <div className="flex items-center justify-between border-b border-slate-800/60 px-4 py-3">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-cyan-300/70">Assistant</p>
-                <p className="text-xs text-slate-400">Ask about rent, expenses, leases.</p>
+                <p className="text-xs uppercase tracking-[0.2em] text-cyan-500/70">Assistant</p>
+                <p className="text-xs text-muted-foreground">Ask about rent, expenses, leases.</p>
               </div>
               <button
-                className="rounded-xl border border-slate-800/70 bg-slate-900/40 px-3 py-2 text-xs text-slate-200 hover:border-cyan-400/60"
+                className="rounded-xl border border-border bg-card px-3 py-2 text-xs text-foreground hover:border-cyan-500/60"
                 onClick={() => setAssistantCollapsed(true)}
               >
                 Collapse
@@ -320,17 +326,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               }}
             />
             <aside
-              className={`absolute right-0 top-0 flex h-full w-[92vw] max-w-md flex-col border-l border-slate-800/60 bg-slate-950/95 shadow-2xl transition-transform ${
+              className={`absolute right-0 top-0 flex h-full w-[92vw] max-w-md flex-col border-l border-border bg-popover shadow-2xl transition-transform ${
                 drawerOpen ? "translate-x-0" : "translate-x-full"
               }`}
             >
-              <div className="flex items-center justify-between border-b border-slate-800/60 px-4 py-3">
+              <div className="flex items-center justify-between border-b border-border px-4 py-3">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-cyan-300/70">Assistant</p>
-                  <p className="text-xs text-slate-400">Ask about rent, expenses, leases.</p>
+                  <p className="text-xs uppercase tracking-[0.2em] text-cyan-500/70">Assistant</p>
+                  <p className="text-xs text-muted-foreground">Ask about rent, expenses, leases.</p>
                 </div>
                 <button
-                  className="rounded-xl border border-slate-800/70 bg-slate-900/40 px-3 py-2 text-xs text-slate-200"
+                  className="rounded-xl border border-border bg-card px-3 py-2 text-xs text-foreground"
                   onClick={() => {
                     setDrawerOpen(false);
                     setAssistantCollapsed(true);

@@ -40,11 +40,11 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
   };
 
   return (
-    <div className="w-full max-w-md rounded-3xl border border-slate-800/70 bg-slate-900/70 p-8 shadow-2xl shadow-black/40">
-      <h1 className="text-2xl font-semibold text-slate-100">
+    <div className="w-full max-w-md rounded-3xl border border-border bg-card p-8 shadow-2xl shadow-black/40">
+      <h1 className="text-2xl font-semibold text-foreground">
         {mode === "login" ? "Welcome back" : "Create your PropAI account"}
       </h1>
-      <p className="mt-2 text-sm text-slate-400">
+      <p className="mt-2 text-sm text-muted-foreground">
         {mode === "login"
           ? "Sign in to manage properties, tenants, and cash flow."
           : "Start tracking properties and tenants in minutes."}
@@ -53,9 +53,9 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
       <form onSubmit={handleSubmit} className="mt-6 space-y-4">
         {mode === "signup" && (
           <div>
-            <label className="text-xs uppercase tracking-wide text-slate-400">Name</label>
+            <label className="text-xs uppercase tracking-wide text-muted-foreground">Name</label>
             <input
-              className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+              className="mt-2 w-full rounded-xl border border-border bg-input px-4 py-3 text-foreground"
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="Avery Johnson"
@@ -65,9 +65,9 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
         )}
         {mode === "signup" && (
           <div>
-            <label className="text-xs uppercase tracking-wide text-slate-400">Organization Name</label>
+            <label className="text-xs uppercase tracking-wide text-muted-foreground">Organization Name</label>
             <input
-              className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+              className="mt-2 w-full rounded-xl border border-border bg-input px-4 py-3 text-foreground"
               value={organizationName}
               onChange={(event) => setOrganizationName(event.target.value)}
               placeholder="554 Ventures"
@@ -76,9 +76,9 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
           </div>
         )}
         <div>
-          <label className="text-xs uppercase tracking-wide text-slate-400">Email</label>
+          <label className="text-xs uppercase tracking-wide text-muted-foreground">Email</label>
           <input
-            className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+            className="mt-2 w-full rounded-xl border border-border bg-input px-4 py-3 text-foreground"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="you@propai.com"
@@ -87,9 +87,9 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
           />
         </div>
         <div>
-          <label className="text-xs uppercase tracking-wide text-slate-400">Password</label>
+          <label className="text-xs uppercase tracking-wide text-muted-foreground">Password</label>
           <input
-            className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+            className="mt-2 w-full rounded-xl border border-border bg-input px-4 py-3 text-foreground"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             placeholder="••••••••"
@@ -105,11 +105,11 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
         </Button>
       </form>
 
-      <p className="mt-6 text-sm text-slate-400">
+      <p className="mt-6 text-sm text-muted-foreground">
         {mode === "login" ? "Need an account?" : "Already have an account?"} {" "}
         <Link
           href={mode === "login" ? "/signup" : "/login"}
-          className="text-cyan-300 hover:text-cyan-200"
+          className="text-primary hover:text-primary/80"
         >
           {mode === "login" ? "Sign up" : "Sign in"}
         </Link>

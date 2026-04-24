@@ -3,8 +3,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { Button } from "@/components/ui/button";
-import DashboardAiChat from "@/components/dashboard-ai-chat";
+import { 
+  Button, 
+  DataCard,
+  StatusBadge,
+  Badge,
+  Text,
+  PageHeader
+} from "@/components/ui";
 
 type Metrics = {
   occupancyRate: number;
@@ -269,7 +275,7 @@ export default function DashboardPage() {
   const getTrendIndicator = (_type: string) => {
     const mock = Math.random();
     if (mock > 0.6) return { icon: "↗", color: "text-emerald-400", label: "up" };
-    if (mock > 0.4) return { icon: "↔", color: "text-slate-400", label: "same" };
+    if (mock > 0.4) return { icon: "↔", color: "text-muted-foreground", label: "same" };
     return { icon: "↘", color: "text-rose-400", label: "down" };
   };
 
@@ -318,18 +324,22 @@ export default function DashboardPage() {
       critical: type === 'text' ? 'text-rose-300' : 'bg-rose-500/20',
       high: type === 'text' ? 'text-orange-300' : 'bg-orange-500/20', 
       medium: type === 'text' ? 'text-amber-300' : 'bg-amber-500/20',
-      normal: type === 'text' ? 'text-slate-300' : 'bg-slate-500/20'
+      normal: type === 'text' ? 'text-muted-foreground' : 'bg-muted'
     };
     return colors[urgency as keyof typeof colors] || colors.normal;
   };
 
   if (loading) {
-    return <p className="text-sm text-slate-400">Loading dashboard...</p>;
+    return <p className="text-sm text-muted-foreground">Loading dashboard...</p>;
   }
 
   return (
     <div className="space-y-8">
-      <DashboardAiChat />
+      <PageHeader
+        title="Dashboard"
+        description="Overview of your property portfolio performance and key metrics."
+      />
+      
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {[
           {
@@ -355,36 +365,35 @@ export default function DashboardPage() {
         ].map((card) => {
           const trend = getTrendIndicator(card.label);
           return (
-            <div
+            <DataCard
               key={card.label}
-              className="rounded-2xl border border-slate-800/70 bg-slate-950/50 p-5"
-            >
-              <p className="text-xs uppercase tracking-wide text-slate-400">{card.label}</p>
-              <p className="mt-3 text-2xl font-semibold text-slate-100">{card.value}</p>
-              <div className="mt-2 flex items-center justify-between">
-                <p className="text-xs text-slate-400">{card.detail}</p>
-                <span className={`text-sm ${trend.color}`} title={`Trend: ${trend.label}`}>
-                  {trend.icon}
-                </span>
-              </div>
-            </div>
+              title={card.label}
+              value={card.value}
+              detail={card.detail}
+              trend={{
+                direction: trend.label === 'up' ? 'up' : trend.label === 'down' ? 'down' : 'neutral',
+                label: trend.label,
+                color: trend.label === 'up' ? 'success' : trend.label === 'down' ? 'error' : 'neutral'
+              }}
+            />
           );
         })}
       </section>
 
       <section className="grid gap-6 lg:grid-cols-[1.4fr_0.6fr]">
-        <div className="rounded-2xl border border-slate-800/70 bg-slate-950/40 p-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-semibold">Alerts & Follow-ups</h2>
-              <p className="text-sm text-slate-400">Focus on what needs action today.</p>
-            </div>
-            <div className="text-xs text-slate-400">
-              Outstanding rent: <span className="text-rose-200">${(metrics?.outstandingRent ?? 0).toLocaleString()}</span>
-            </div>
-          </div>
-
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
+        <DataCard
+          title="Alerts & Follow-ups"
+          subtitle="Focus on what needs action today."
+          size="lg"
+          footer={
+            <Text variant="muted" size="sm">
+              Outstanding rent: <Text variant="error" className="inline">
+                ${(metrics?.outstandingRent ?? 0).toLocaleString()}
+              </Text>
+            </Text>
+          }
+        >
+          <div className="grid gap-4 md:grid-cols-3">
             {[
               {
                 title: "Late Payments",
@@ -411,16 +420,21 @@ export default function DashboardPage() {
                 actionHref: "/vendors?view=pending"
               }
             ].map((group) => (
-              <div key={group.title} className="rounded-xl border border-slate-800/70 bg-slate-950/40 p-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-slate-100">{group.title}</p>
-                  <span className="rounded-full border border-slate-700 px-2 py-0.5 text-xs text-slate-300">
-                    {group.badge}
-                  </span>
-                </div>
-                
-                <div className="mt-3 space-y-2 text-xs text-slate-300">
-                  {group.items.length === 0 && <p className="text-slate-400">{group.empty}</p>}
+              <DataCard
+                key={group.title}
+                title={group.title}
+                badge={<Badge variant="outline">{group.badge}</Badge>}
+                size="sm"
+                action={
+                  group.badge > 0 ? (
+                    <Button asChild size="sm" variant="secondary">
+                      <Link href={group.actionHref}>{group.actionLabel}</Link>
+                    </Button>
+                  ) : undefined
+                }
+              >
+                <div className="space-y-2 text-xs text-muted-foreground">
+                  {group.items.length === 0 && <Text variant="muted" size="sm">{group.empty}</Text>}
                   {group.items.slice(0, 3).map((item) => {
                     const urgency = item.dueDate 
                       ? formatDateWithUrgency(item.dueDate, 'due')
@@ -431,60 +445,57 @@ export default function DashboardPage() {
                     return (
                       <div 
                         key={item.id} 
-                        className={`rounded-lg border border-slate-800/60 p-2 ${
-                          urgency ? getUrgencyColor(urgency.urgency, 'bg') : 'bg-slate-950/60'
+                        className={`rounded-lg border border-border p-2 ${
+                          urgency ? getUrgencyColor(urgency.urgency, 'bg') : 'bg-muted'
                         }`}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-slate-200 truncate">
+                            <Text size="sm" weight="semibold" truncate>
                               {item.property ?? "Property"}
-                            </p>
-                            <p className="text-[11px] text-slate-400 truncate">
+                            </Text>
+                            <Text variant="muted" size="xs" truncate>
                               {item.tenant ?? "Tenant"} {item.unit ? `· Unit ${item.unit}` : ""}
-                            </p>
+                            </Text>
                             {item.amount && (
-                              <p className="text-[11px] text-rose-200 font-medium">
+                              <Text variant="error" size="xs" weight="medium">
                                 ${item.amount.toLocaleString()}
-                              </p>
+                              </Text>
                             )}
                           </div>
                           {urgency && (
-                            <span className={`text-[10px] ${getUrgencyColor(urgency.urgency)} font-medium`}>
-                              {urgency.urgency === 'critical' ? '!' : urgency.urgency === 'high' ? '!!' : ''}
-                            </span>
+                            <StatusBadge
+                              status={urgency.urgency === 'critical' ? 'OVERDUE' : urgency.urgency === 'high' ? 'PENDING' : 'ACTIVE'}
+                              size="sm"
+                              showIcon={false}
+                              customLabel={urgency.urgency === 'critical' ? '!' : urgency.urgency === 'high' ? '!!' : ''}
+                            />
                           )}
                         </div>
                         {urgency && (
-                          <p className={`text-[11px] ${getUrgencyColor(urgency.urgency)} mt-1`}>
+                          <Text variant="muted" size="xs" className={getUrgencyColor(urgency.urgency)}>
                             {urgency.text}
-                          </p>
+                          </Text>
                         )}
                         {item.title && (
-                          <p className="text-[11px] text-slate-300 mt-1 truncate">{item.title}</p>
+                          <Text variant="muted" size="xs" truncate className="mt-1">{item.title}</Text>
                         )}
                       </div>
                     );
                   })}
                 </div>
-
-                {group.badge > 0 && (
-                  <div className="mt-3 pt-3 border-t border-slate-800/50">
-                    <Button asChild size="sm" variant="secondary" className="w-full h-7 text-xs">
-                      <Link href={group.actionHref}>{group.actionLabel}</Link>
-                    </Button>
-                  </div>
-                )}
-              </div>
+              </DataCard>
             ))}
           </div>
-        </div>
+        </DataCard>
 
         <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-800/70 bg-slate-950/40 p-6">
-            <h3 className="text-lg font-semibold">Quick Actions</h3>
-            <p className="text-xs text-slate-400">Jump into daily workflows.</p>
-            <div className="mt-4 grid gap-3">
+          <DataCard
+            title="Quick Actions"
+            subtitle="Jump into daily workflows."
+            size="lg"
+          >
+            <div className="grid gap-3">
               {/* Smart Actions based on current alerts */}
               {getSmartActions().map((action, index) => (
                 <Button 
@@ -517,19 +528,17 @@ export default function DashboardPage() {
                 <Link href="/documents">Upload document</Link>
               </Button>
             </div>
-          </div>
+          </DataCard>
 
-          <div className="rounded-2xl border border-slate-800/70 bg-slate-950/40 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold">AI Action Center</h3>
-                <p className="text-xs text-slate-400">Prioritized business insights</p>
-              </div>
-              <span className="text-xs text-slate-400">{businessInsights.length} insights</span>
-            </div>
-            <div className="mt-4 space-y-3">
+          <DataCard
+            title="AI Action Center"
+            subtitle="Prioritized business insights"
+            badge={<Badge variant="outline">{businessInsights.length} insights</Badge>}
+            size="lg"
+          >
+            <div className="space-y-3">
               {businessInsights.length === 0 && (
-                <p className="text-sm text-slate-400">No actionable insights available.</p>
+                <Text variant="muted" size="sm">No actionable insights available.</Text>
               )}
               {businessInsights.map((insight) => {
                 const getPriorityColors = (priority: string) => {
@@ -537,7 +546,7 @@ export default function DashboardPage() {
                     case 'HIGH': return { bg: 'bg-rose-500/10', border: 'border-rose-500/30', badge: 'bg-rose-500/20 text-rose-300' };
                     case 'MEDIUM': return { bg: 'bg-amber-500/10', border: 'border-amber-500/30', badge: 'bg-amber-500/20 text-amber-300' };
                     case 'LOW': return { bg: 'bg-blue-500/10', border: 'border-blue-500/30', badge: 'bg-blue-500/20 text-blue-300' };
-                    default: return { bg: 'bg-slate-500/10', border: 'border-slate-500/30', badge: 'bg-slate-500/20 text-slate-300' };
+                    default: return { bg: 'bg-muted/50', border: 'border-border', badge: 'bg-muted text-muted-foreground' };
                   }
                 };
                 
@@ -558,57 +567,58 @@ export default function DashboardPage() {
                         </span>
                       </div>
                       {insight.urgency && (
-                        <span className="text-[10px] text-slate-400">
+                        <Text variant="muted" size="xs">
                           {insight.urgency.daysRemaining !== undefined && insight.urgency.daysRemaining >= 0
                             ? `${insight.urgency.daysRemaining}d left`
                             : insight.context.timeframe
                           }
-                        </span>
+                        </Text>
                       )}
                     </div>
                     
-                    <h4 className="text-sm font-semibold text-slate-100 mb-1">
+                    <Text size="sm" weight="semibold" className="mb-1">
                       {insight.title}
-                    </h4>
-                    <p className="text-xs text-slate-300 mb-2">
+                    </Text>
+                    <Text variant="muted" size="xs" className="mb-2">
                       {insight.description}
-                    </p>
+                    </Text>
                     
                     {/* Business Impact */}
                     {insight.businessImpact.amount && (
-                      <div className="mb-3 text-xs">
-                        <span className="text-slate-400">
+                      <div className="mb-3">
+                        <Text variant="muted" size="xs" className="inline">
                           {insight.businessImpact.type === 'revenue' ? 'Potential revenue: ' : 'Estimated savings: '}
-                        </span>
-                        <span className={`font-semibold ${
-                          insight.businessImpact.type === 'revenue' ? 'text-emerald-300' : 'text-blue-300'
-                        }`}>
+                        </Text>
+                        <Text 
+                          size="xs" 
+                          weight="semibold" 
+                          variant={insight.businessImpact.type === 'revenue' ? 'success' : 'primary'}
+                          className="inline"
+                        >
                           ${insight.businessImpact.amount.toLocaleString()}
                           {insight.businessImpact.type === 'revenue' && insight.context.timeframe?.includes('annual') ? '/year' : ''}
-                        </span>
+                        </Text>
                       </div>
                     )}
                     {insight.businessImpact.percentage && (
-                      <div className="mb-3 text-xs">
-                        <span className="text-slate-400">Performance: </span>
-                        <span className="font-semibold text-emerald-300">
+                      <div className="mb-3">
+                        <Text variant="muted" size="xs" className="inline">Performance: </Text>
+                        <Text size="xs" weight="semibold" variant="success" className="inline">
                           {insight.businessImpact.percentage.toFixed(0)}%
-                        </span>
+                        </Text>
                       </div>
                     )}
                     
                     {/* Context Information */}
                     {(insight.context.property || insight.context.tenant) && (
-                      <div className="mb-3 text-[11px] text-slate-400">
-                        {insight.context.property && (
-                          <span>{insight.context.property}</span>
-                        )}
-                        {insight.context.tenant && (
-                          <span>{insight.context.property ? ' • ' : ''}{insight.context.tenant}</span>
-                        )}
-                        {insight.context.unit && (
-                          <span> • Unit {insight.context.unit}</span>
-                        )}
+                      <div className="mb-3">
+                        <Text variant="muted" size="xs">
+                          {insight.context.property && insight.context.property}
+                          {insight.context.tenant && (
+                            <>{insight.context.property ? ' • ' : ''}{insight.context.tenant}</>
+                          )}
+                          {insight.context.unit && <> • Unit {insight.context.unit}</>}
+                        </Text>
                       </div>
                     )}
                     
@@ -618,9 +628,8 @@ export default function DashboardPage() {
                         <Button 
                           key={action.href}
                           asChild
-                          size="xs"
-                          variant={index === 0 ? "default" : action.variant}
-                          className="text-[10px] h-5"
+                          size="sm"
+                          variant={index === 0 ? "default" : action.variant as 'default' | 'secondary' | 'outline'}
                         >
                           <Link href={action.href}>{action.label}</Link>
                         </Button>
@@ -630,11 +639,11 @@ export default function DashboardPage() {
                 );
               })}
             </div>
-          </div>
+          </DataCard>
         </div>
       </section>
 
-      {error && <p className="text-sm text-rose-300">{error}</p>}
+      {error && <Text variant="error" size="sm">{error}</Text>}
     </div>
   );
 }

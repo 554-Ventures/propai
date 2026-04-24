@@ -3,6 +3,10 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/molecules/page-header";
+import { DataCard } from "@/components/ui/molecules/data-card";
+import { FormField } from "@/components/ui/molecules/form-field";
+import { Input } from "@/components/ui/atoms/input";
 
 type Property = {
   id: string;
@@ -166,21 +170,20 @@ export default function CashflowPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-semibold">Cashflow</h2>
-          <p className="text-sm text-slate-400">Track income & expenses across your portfolio.</p>
-        </div>
-
-        <Button
-          onClick={() => {
-            setError(null);
-            setModalOpen(true);
-          }}
-        >
-          Add transaction
-        </Button>
-      </header>
+      <PageHeader
+        title="Cashflow"
+        description="Track income & expenses across your portfolio."
+        action={
+          <Button
+            onClick={() => {
+              setError(null);
+              setModalOpen(true);
+            }}
+          >
+            Add transaction
+          </Button>
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         {(
@@ -194,8 +197,8 @@ export default function CashflowPage() {
             key={item.key}
             className={`rounded-xl border px-3 py-2 text-sm transition ${
               tab === item.key
-                ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-100"
-                : "border-slate-800/70 bg-slate-950/40 text-slate-200 hover:border-slate-600/70"
+                ? "border-primary/50 bg-primary/10 text-primary-foreground"
+                : "border-border bg-card text-card-foreground hover:bg-accent hover:text-accent-foreground"
             }`}
             onClick={() => setTab(item.key)}
           >
@@ -205,28 +208,23 @@ export default function CashflowPage() {
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <label className="text-xs uppercase tracking-wide text-slate-400">From</label>
-          <input
+        <FormField label="From" className="min-w-[140px]">
+          <Input
             type="date"
-            className="mt-2 w-full rounded-xl border border-slate-800/70 bg-slate-950/40 px-3 py-2 text-sm text-slate-100"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
           />
-        </div>
-        <div>
-          <label className="text-xs uppercase tracking-wide text-slate-400">To</label>
-          <input
+        </FormField>
+        <FormField label="To" className="min-w-[140px]">
+          <Input
             type="date"
-            className="mt-2 w-full rounded-xl border border-slate-800/70 bg-slate-950/40 px-3 py-2 text-sm text-slate-100"
             value={to}
             onChange={(e) => setTo(e.target.value)}
           />
-        </div>
-        <div className="min-w-[220px] flex-1">
-          <label className="text-xs uppercase tracking-wide text-slate-400">Property</label>
+        </FormField>
+        <FormField label="Property" className="min-w-[220px] flex-1">
           <select
-            className="mt-2 w-full rounded-xl border border-slate-800/70 bg-slate-950/40 px-3 py-2 text-sm text-slate-100"
+            className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
             value={propertyId}
             onChange={(e) => setPropertyId(e.target.value)}
           >
@@ -237,14 +235,14 @@ export default function CashflowPage() {
               </option>
             ))}
           </select>
-        </div>
+        </FormField>
         <Button type="button" variant="secondary" onClick={clearFilters} disabled={!filtersActive || loading}>
           Clear filters
         </Button>
       </div>
 
       {error && (
-        <div className="rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-200">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>{error}</div>
             <Button type="button" variant="secondary" onClick={load} disabled={loading}>
@@ -254,29 +252,27 @@ export default function CashflowPage() {
         </div>
       )}
 
-      <section className="grid gap-3 rounded-2xl border border-slate-800/70 bg-slate-950/40 p-4 sm:grid-cols-3">
-        <div>
-          <div className="text-xs uppercase tracking-wide text-slate-400">Income</div>
-          <div className="mt-1 text-lg font-semibold text-emerald-200">{formatMoney(totals.income)}</div>
-        </div>
-        <div>
-          <div className="text-xs uppercase tracking-wide text-slate-400">Expenses</div>
-          <div className="mt-1 text-lg font-semibold text-rose-200">{formatMoney(totals.expense)}</div>
-        </div>
-        <div>
-          <div className="text-xs uppercase tracking-wide text-slate-400">Net</div>
-          <div
-            className={`mt-1 text-lg font-semibold ${
-              totals.net >= 0 ? "text-emerald-200" : "text-rose-200"
-            }`}
-          >
-            {formatMoney(totals.net)}
-          </div>
-        </div>
+      <section className="grid gap-3 sm:grid-cols-3">
+        <DataCard
+          title="Income"
+          value={formatMoney(totals.income)}
+          size="sm"
+        />
+        <DataCard
+          title="Expenses"
+          value={formatMoney(totals.expense)}
+          size="sm"
+        />
+        <DataCard
+          title="Net"
+          value={formatMoney(totals.net)}
+          status={totals.net >= 0 ? "success" : "error"}
+          size="sm"
+        />
       </section>
 
-      <section className="rounded-2xl border border-slate-800/70 bg-slate-950/40">
-        <div className="grid grid-cols-[140px_1fr_1fr_44px_140px] gap-3 border-b border-slate-800/70 px-4 py-3 text-xs uppercase tracking-wide text-slate-400">
+      <section className="rounded-lg border border-border bg-card">
+        <div className="grid grid-cols-[140px_1fr_1fr_44px_140px] gap-3 border-b border-border px-4 py-3 text-xs uppercase tracking-wide text-muted-foreground">
           <div>Date</div>
           <div>Category</div>
           <div>Property</div>
@@ -285,9 +281,9 @@ export default function CashflowPage() {
         </div>
 
         {loading ? (
-          <div className="px-4 py-6 text-sm text-slate-400">Loading transactions...</div>
+          <div className="px-4 py-6 text-sm text-muted-foreground">Loading transactions...</div>
         ) : transactions.length === 0 ? (
-          <div className="px-4 py-6 text-sm text-slate-400">
+          <div className="px-4 py-6 text-sm text-muted-foreground">
             {filtersActive ? (
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>No transactions match your current filters.</div>
@@ -300,7 +296,7 @@ export default function CashflowPage() {
             )}
           </div>
         ) : (
-          <div className="divide-y divide-slate-800/60">
+          <div className="divide-y divide-border">
             {transactions.map((t) => {
               const isIncome = t.type === "INCOME";
               const signed = isIncome ? Math.abs(t.amount) : -Math.abs(t.amount);
@@ -312,21 +308,21 @@ export default function CashflowPage() {
                   key={t.id}
                   className="grid grid-cols-[140px_1fr_1fr_44px_140px] items-center gap-3 px-4 py-3 text-sm"
                 >
-                  <div className="text-slate-300">{new Date(t.date).toLocaleDateString()}</div>
-                  <div className="min-w-0 truncate text-slate-100">{t.category}</div>
-                  <div className="min-w-0 truncate text-slate-300">{propertyName}</div>
+                  <div className="text-muted-foreground">{new Date(t.date).toLocaleDateString()}</div>
+                  <div className="min-w-0 truncate text-foreground">{t.category}</div>
+                  <div className="min-w-0 truncate text-muted-foreground">{propertyName}</div>
                   <div className="flex justify-center">
                     {hasNotes ? (
                       <span
                         title={t.notes ?? undefined}
-                        className="inline-flex h-2 w-2 rounded-full bg-cyan-300/80"
+                        className="inline-flex h-2 w-2 rounded-full bg-primary/80"
                         aria-label="Has notes"
                       />
                     ) : (
-                      <span className="inline-flex h-2 w-2 rounded-full bg-slate-700/60" aria-label="No notes" />
+                      <span className="inline-flex h-2 w-2 rounded-full bg-muted/60" aria-label="No notes" />
                     )}
                   </div>
-                  <div className={`text-right font-medium ${isIncome ? "text-emerald-300" : "text-rose-300"}`}>
+                  <div className={`text-right font-medium ${isIncome ? "text-green-500" : "text-red-500"}`}>
                     {amountLabel}
                   </div>
                 </div>
@@ -345,14 +341,14 @@ export default function CashflowPage() {
             }}
           />
 
-          <div className="relative w-full max-w-lg rounded-3xl border border-slate-700/70 bg-slate-950 p-6 shadow-2xl">
+          <div className="relative w-full max-w-lg rounded-2xl border border-border bg-popover p-6 shadow-lg">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-lg font-semibold text-slate-100">Add transaction</h3>
-                <p className="text-xs text-slate-400">Income or expense. Category is free text for now.</p>
+                <h3 className="text-lg font-semibold text-popover-foreground">Add transaction</h3>
+                <p className="text-xs text-muted-foreground">Income or expense. Category is free text for now.</p>
               </div>
               <button
-                className="rounded-xl border border-slate-800/70 bg-slate-900/40 px-3 py-2 text-xs text-slate-200"
+                className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground hover:bg-accent hover:text-accent-foreground"
                 onClick={() => {
                   if (!submitting) setModalOpen(false);
                 }}
@@ -363,59 +359,51 @@ export default function CashflowPage() {
 
             <form onSubmit={submit} className="mt-6 grid gap-4">
               <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="text-xs uppercase tracking-wide text-slate-400">Type</label>
+                <FormField label="Type">
                   <select
-                    className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+                    className="mt-2 w-full rounded-md border border-border bg-background px-4 py-3 text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                     value={form.type}
                     onChange={(e) => updateForm("type", e.target.value as CashflowType)}
                   >
                     <option value="INCOME">Income</option>
                     <option value="EXPENSE">Expense</option>
                   </select>
-                </div>
-                <div>
-                  <label className="text-xs uppercase tracking-wide text-slate-400">Amount</label>
-                  <input
+                </FormField>
+                <FormField label="Amount">
+                  <Input
                     type="number"
                     inputMode="decimal"
                     step="0.01"
-                    className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
                     value={form.amount}
                     onChange={(e) => updateForm("amount", e.target.value)}
                     placeholder="1200.00"
                     required
                   />
-                </div>
+                </FormField>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="text-xs uppercase tracking-wide text-slate-400">Date</label>
-                  <input
+                <FormField label="Date">
+                  <Input
                     type="date"
-                    className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
                     value={form.date}
                     onChange={(e) => updateForm("date", e.target.value)}
                     required
                   />
-                </div>
-                <div>
-                  <label className="text-xs uppercase tracking-wide text-slate-400">Category</label>
-                  <input
-                    className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+                </FormField>
+                <FormField label="Category">
+                  <Input
                     value={form.category}
                     onChange={(e) => updateForm("category", e.target.value)}
                     placeholder={form.type === "INCOME" ? "Rent" : "Repairs"}
                     required
                   />
-                </div>
+                </FormField>
               </div>
 
-              <div>
-                <label className="text-xs uppercase tracking-wide text-slate-400">Property (optional)</label>
+              <FormField label="Property (optional)">
                 <select
-                  className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+                  className="mt-2 w-full rounded-md border border-border bg-background px-4 py-3 text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                   value={form.propertyId}
                   onChange={(e) => updateForm("propertyId", e.target.value)}
                 >
@@ -426,18 +414,17 @@ export default function CashflowPage() {
                     </option>
                   ))}
                 </select>
-              </div>
+              </FormField>
 
-              <div>
-                <label className="text-xs uppercase tracking-wide text-slate-400">Notes (optional)</label>
+              <FormField label="Notes (optional)">
                 <textarea
-                  className="mt-2 w-full resize-none rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-slate-100"
+                  className="mt-2 w-full resize-none rounded-md border border-border bg-background px-4 py-3 text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                   rows={3}
                   value={form.notes}
                   onChange={(e) => updateForm("notes", e.target.value)}
                   placeholder="Optional"
                 />
-              </div>
+              </FormField>
 
               <div className="flex items-center justify-end gap-2">
                 <Button

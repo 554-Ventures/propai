@@ -612,7 +612,7 @@ export default function ChatPane() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="border-b border-slate-900/80 px-4 py-2">
+      <div className="border-b border-border px-4 py-2">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <button
@@ -620,14 +620,14 @@ export default function ChatPane() {
                 setSessionsOpen((prev) => !prev);
                 if (!sessionsOpen) void refreshSessions();
               }}
-              className="rounded-full border border-slate-800/80 bg-slate-900/60 px-3 py-1 text-xs text-slate-200 transition hover:border-cyan-400/70"
+              className="rounded-full border border-border bg-muted px-3 py-1 text-xs text-foreground transition hover:border-primary/70"
               disabled={loading}
               title="History"
             >
               History
             </button>
             {activeSessionId ? (
-              <span className="text-[11px] text-slate-500">Session {activeSessionId.slice(0, 6)}…</span>
+              <span className="text-[11px] text-muted-foreground">Session {activeSessionId.slice(0, 6)}…</span>
             ) : null}
           </div>
           <div className="flex items-center gap-2">
@@ -645,7 +645,7 @@ export default function ChatPane() {
             <button
               key={action.label}
               onClick={() => sendAsNewAction(action.message)}
-              className="rounded-full border border-slate-800/80 bg-slate-900/60 px-3 py-1 text-xs text-slate-200 transition hover:border-cyan-400/70"
+              className="rounded-full border border-border bg-secondary px-3 py-1 text-xs text-secondary-foreground transition hover:border-primary/70"
               disabled={loading}
             >
               {action.label}
@@ -654,7 +654,7 @@ export default function ChatPane() {
           {isDraftPending ? (
             <button
               onClick={() => void startOver()}
-              className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-100 transition hover:border-rose-400/60"
+              className="rounded-full border border-destructive/40 bg-destructive/10 px-3 py-1 text-xs font-semibold text-destructive transition hover:border-destructive/60"
               disabled={loading}
               title="Cancel the pending draft and start a new chat"
             >
@@ -665,11 +665,11 @@ export default function ChatPane() {
       </div>
 
       {sessionsOpen && (
-        <div className="border-b border-slate-800/70 bg-slate-950/50 px-4 py-3">
+        <div className="border-b border-border bg-card px-4 py-3">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Chats</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Chats</p>
             <button
-              className="text-xs text-slate-400 hover:text-slate-200"
+              className="text-xs text-muted-foreground hover:text-foreground"
               onClick={() => setSessionsOpen(false)}
             >
               Close
@@ -677,9 +677,9 @@ export default function ChatPane() {
           </div>
           <div className="mt-2 max-h-48 overflow-y-auto">
             {sessionsLoading ? (
-              <p className="text-xs text-slate-400">Loading…</p>
+              <p className="text-xs text-muted-foreground">Loading…</p>
             ) : sessions.length === 0 ? (
-              <p className="text-xs text-slate-400">No saved chats yet.</p>
+              <p className="text-xs text-muted-foreground">No saved chats yet.</p>
             ) : (
               <ul className="space-y-1">
                 {sessions.map((s) => {
@@ -689,17 +689,17 @@ export default function ChatPane() {
                     <li key={s.id}>
                       <button
                         onClick={() => void switchSession(s.id)}
-                        className={`w-full rounded-xl border px-3 py-2 text-left text-xs transition hover:border-cyan-400/60 ${
+                        className={`w-full rounded-xl border px-3 py-2 text-left text-xs transition hover:border-primary/60 ${
                           isActive
-                            ? "border-cyan-400/60 bg-cyan-500/10 text-cyan-100"
-                            : "border-slate-800/70 bg-slate-900/40 text-slate-200"
+                            ? "border-primary/60 bg-primary/10 text-primary"
+                            : "border-border bg-muted text-foreground"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <p className="font-semibold text-slate-100">{title}</p>
-                          {s.updatedAt ? <span className="text-[10px] text-slate-500">{formatTime(s.updatedAt)}</span> : null}
+                          <p className="font-semibold text-foreground">{title}</p>
+                          {s.updatedAt ? <span className="text-[10px] text-muted-foreground">{formatTime(s.updatedAt)}</span> : null}
                         </div>
-                        {s.lastMessage ? <p className="mt-1 line-clamp-2 text-[11px] text-slate-400">{s.lastMessage}</p> : null}
+                        {s.lastMessage ? <p className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">{s.lastMessage}</p> : null}
                       </button>
                     </li>
                   );
@@ -715,21 +715,21 @@ export default function ChatPane() {
           <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
             <div
               className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
-                msg.role === "user" ? "bg-cyan-500/20 text-cyan-100" : "bg-slate-900/70 text-slate-200"
+                msg.role === "user" ? "bg-primary/20 text-primary-foreground" : "bg-muted text-foreground"
               }`}
             >
               {msg.role === "assistant" && msg.metadata?.aiDraft ? (
                 <div className="space-y-3">
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Draft</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-100">{msg.metadata.aiDraft.summary}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Draft</p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">{msg.metadata.aiDraft.summary}</p>
                     {msg.metadata.aiDraft.toolCalls?.[0]?.toolName ? (
-                      <p className="mt-1 text-[11px] text-slate-400">Tool: {msg.metadata.aiDraft.toolCalls[0].toolName}</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">Tool: {msg.metadata.aiDraft.toolCalls[0].toolName}</p>
                     ) : null}
                   </div>
 
-                  <div className="rounded-xl border border-slate-800/70 bg-slate-950/60 px-3 py-2 text-xs text-slate-200">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-400">Fields</p>
+                  <div className="rounded-xl border border-border bg-card px-3 py-2 text-xs text-foreground">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Fields</p>
                     <ul className="mt-2 space-y-1">
                       {Object.entries(
                         Object.keys(msg.metadata.aiDraft.fields ?? {}).length > 0
@@ -737,8 +737,8 @@ export default function ChatPane() {
                           : (msg.metadata.aiDraft.toolCalls?.[0]?.args ?? {})
                       ).map(([key, value]) => (
                         <li key={key} className="flex items-start justify-between gap-3">
-                          <span className="text-slate-400">{key}</span>
-                          <span className="text-right text-slate-100">
+                          <span className="text-muted-foreground">{key}</span>
+                          <span className="text-right text-foreground">
                             {typeof value === "string" ? value : JSON.stringify(value)}
                           </span>
                         </li>
@@ -750,7 +750,7 @@ export default function ChatPane() {
                     <div className="space-y-2">
                       {msg.metadata.aiDraft.clarify.choices.map((choice) => (
                         <div key={choice.field} className="flex flex-wrap items-center gap-2">
-                          <span className="text-[11px] text-slate-400">{choice.field}:</span>
+                          <span className="text-[11px] text-muted-foreground">{choice.field}:</span>
                           {choice.options.map((opt) => (
                             <button
                               key={`${choice.field}-${String(opt.value)}`}
@@ -761,7 +761,7 @@ export default function ChatPane() {
                                   })
                                 )
                               }
-                              className="rounded-full border border-slate-800/80 bg-slate-900/60 px-3 py-1 text-xs text-slate-200 transition hover:border-cyan-400/70"
+                              className="rounded-full border border-border bg-secondary px-3 py-1 text-xs text-secondary-foreground transition hover:border-primary/70"
                               disabled={loading}
                               title={`Set ${choice.field}`}
                             >
@@ -795,21 +795,21 @@ export default function ChatPane() {
                 </div>
               ) : msg.role === "assistant" && msg.metadata?.aiReceipt ? (
                 <div className="space-y-2">
-                  <p className="text-sm font-semibold text-slate-100">{msg.metadata.aiReceipt.title}</p>
+                  <p className="text-sm font-semibold text-foreground">{msg.metadata.aiReceipt.title}</p>
                   {msg.metadata.aiReceipt.detail ? (
-                    <p className="text-xs text-slate-300">{msg.metadata.aiReceipt.detail}</p>
+                    <p className="text-xs text-muted-foreground">{msg.metadata.aiReceipt.detail}</p>
                   ) : null}
                   {msg.metadata.aiReceipt.href ? (
                     <a
                       href={msg.metadata.aiReceipt.href}
-                      className="text-xs font-semibold text-cyan-200 hover:text-cyan-100"
+                      className="text-xs font-semibold text-primary hover:text-primary/80"
                     >
                       View
                     </a>
                   ) : null}
                 </div>
               ) : msg.role === "assistant" ? (
-                <div className="prose prose-sm prose-invert max-w-none">
+                <div className="prose prose-sm max-w-none dark:prose-invert">
                   <ReactMarkdown
                     components={{
                       p: ({ children }) => <p className="mb-2 leading-relaxed last:mb-0">{children}</p>,
@@ -817,13 +817,13 @@ export default function ChatPane() {
                       ol: ({ children }) => <ol className="mb-2 list-decimal pl-4">{children}</ol>,
                       li: ({ children }) => <li className="mb-1">{children}</li>,
                       code: ({ children }) => (
-                        <code className="rounded bg-slate-800/50 px-1 py-0.5 text-cyan-300">{children}</code>
+                        <code className="rounded bg-muted px-1 py-0.5 text-primary">{children}</code>
                       ),
                       pre: ({ children }) => (
-                        <pre className="mb-2 overflow-x-auto rounded-lg bg-slate-950/80 p-3">{children}</pre>
+                        <pre className="mb-2 overflow-x-auto rounded-lg bg-muted/80 p-3">{children}</pre>
                       ),
-                      strong: ({ children }) => <strong className="font-semibold text-cyan-200">{children}</strong>,
-                      em: ({ children }) => <em className="italic text-slate-300">{children}</em>,
+                      strong: ({ children }) => <strong className="font-semibold text-primary">{children}</strong>,
+                      em: ({ children }) => <em className="italic text-muted-foreground">{children}</em>,
                       h1: ({ children }) => <h1 className="mb-2 text-lg font-bold">{children}</h1>,
                       h2: ({ children }) => <h2 className="mb-2 text-base font-bold">{children}</h2>,
                       h3: ({ children }) => <h3 className="mb-1 text-sm font-bold">{children}</h3>
@@ -835,18 +835,18 @@ export default function ChatPane() {
               ) : (
                 <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
               )}
-              <div className="mt-2 text-[11px] text-slate-400">{formatTime(msg.createdAt)}</div>
+              <div className="mt-2 text-[11px] text-muted-foreground">{formatTime(msg.createdAt)}</div>
               {msg.metadata?.toolCalls && msg.metadata.toolCalls.length > 0 && (
-                <div className="mt-2 rounded-xl border border-slate-800/70 bg-slate-950/80 px-3 py-2 text-[11px] text-slate-300">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-400">Tools</p>
+                <div className="mt-2 rounded-xl border border-border bg-muted px-3 py-2 text-[11px] text-muted-foreground">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Tools</p>
                   {msg.metadata.toolCalls.map((tool, index) => (
                     <p key={`${tool.toolName}-${index}`}>• {tool.toolName}</p>
                   ))}
                 </div>
               )}
               {msg.metadata?.citations && msg.metadata.citations.length > 0 && (
-                <div className="mt-2 rounded-xl border border-slate-800/70 bg-slate-950/80 px-3 py-2 text-[11px] text-slate-300">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-400">Data sources</p>
+                <div className="mt-2 rounded-xl border border-border bg-muted px-3 py-2 text-[11px] text-muted-foreground">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Data sources</p>
                   {msg.metadata.citations.map((cite, index) => (
                     <p key={`${cite.label}-${index}`}>
                       • {cite.label}: {cite.detail}
@@ -860,11 +860,11 @@ export default function ChatPane() {
 
         {loading && (
           <div className="flex justify-start">
-            <div className="rounded-2xl bg-slate-900/70 px-4 py-3 text-sm text-slate-300">
+            <div className="rounded-2xl bg-muted px-4 py-3 text-sm text-muted-foreground">
               <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400" />
-                <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400 [animation-delay:150ms]" />
-                <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400 [animation-delay:300ms]" />
+                <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground" />
+                <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:150ms]" />
+                <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:300ms]" />
               </span>
             </div>
           </div>
@@ -874,10 +874,10 @@ export default function ChatPane() {
       </div>
 
       {error && (
-        <div className="border-t border-rose-500/40 bg-rose-500/10 px-4 py-2 text-xs text-rose-200">{error}</div>
+        <div className="border-t border-destructive/40 bg-destructive/10 px-4 py-2 text-xs text-destructive">{error}</div>
       )}
 
-      <div className="border-t border-slate-800/70 px-4 py-3">
+      <div className="border-t border-border px-4 py-3">
         <div className="flex items-center gap-2">
           <textarea
             ref={inputRef}
@@ -895,7 +895,7 @@ export default function ChatPane() {
                 : "Ask about rent, properties, expenses..."
             }
             rows={1}
-            className="flex-1 resize-none rounded-2xl border border-slate-800/70 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400/70 focus:outline-none"
+            className="flex-1 resize-none rounded-2xl border border-border bg-input px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/70 focus:outline-none"
             disabled={loading}
           />
           {pendingActionId ? (
@@ -908,7 +908,7 @@ export default function ChatPane() {
           </Button>
         </div>
         {pendingActionId ? (
-          <p className="mt-2 text-[11px] text-slate-400">Continuing pending action {pendingActionId.slice(0, 6)}…</p>
+          <p className="mt-2 text-[11px] text-muted-foreground">Continuing pending action {pendingActionId.slice(0, 6)}…</p>
         ) : null}
       </div>
     </div>

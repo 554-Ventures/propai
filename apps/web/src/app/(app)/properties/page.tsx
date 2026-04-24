@@ -2,8 +2,19 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Building, Users, Home } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import { Button } from "@/components/ui/button";
+import { 
+  Button, 
+  PageHeader,
+  PageHeaderAction,
+  DataCard,
+  DataCardAction,
+  PropertyStatusBadge,
+  SkeletonCard,
+  Text,
+  Badge
+} from "@/components/ui";
 import { ArchiveConfirmModal } from "@/components/ArchiveConfirmModal";
 
 type Property = {
@@ -94,99 +105,98 @@ export default function PropertiesPage() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-semibold">Properties</h2>
-          <p className="text-sm text-slate-400">Track assets, unit counts, and performance.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex gap-2">
-            <button
-              className={`rounded-full border px-4 py-2 text-sm ${
-                !showArchived
-                  ? "border-cyan-400/70 bg-cyan-400/10 text-cyan-200"
-                  : "border-slate-700/70 text-slate-300 hover:border-slate-600"
-              }`}
-              onClick={() => setShowArchived(false)}
-            >
-              Active
-            </button>
-            <button
-              className={`rounded-full border px-4 py-2 text-sm ${
-                showArchived
-                  ? "border-cyan-400/70 bg-cyan-400/10 text-cyan-200"
-                  : "border-slate-700/70 text-slate-300 hover:border-slate-600"
-              }`}
-              onClick={() => setShowArchived(true)}
-            >
-              Archived
-            </button>
-          </div>
-          <Button asChild>
-            <Link href="/properties/new">Add Property</Link>
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Properties"
+        description="Track assets, unit counts, and performance."
+        action={
+          <PageHeaderAction.Group>
+            <div className="flex gap-2">
+              <Badge
+                variant={!showArchived ? "default" : "outline"}
+                className="cursor-pointer px-4 py-2"
+                onClick={() => setShowArchived(false)}
+              >
+                Active
+              </Badge>
+              <Badge
+                variant={showArchived ? "default" : "outline"}
+                className="cursor-pointer px-4 py-2"
+                onClick={() => setShowArchived(true)}
+              >
+                Archived
+              </Badge>
+            </div>
+            <Button asChild>
+              <Link href="/properties/new">Add Property</Link>
+            </Button>
+          </PageHeaderAction.Group>
+        }
+      />
 
-      {error && <p className="mt-4 text-sm text-rose-300">{error}</p>}
-      {successMessage && <p className="mt-4 text-sm text-emerald-300">{successMessage}</p>}
+      {error && <Text variant="error" size="sm" className="mb-4">{error}</Text>}
+      {successMessage && <Text variant="success" size="sm" className="mb-4">{successMessage}</Text>}
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2">
         {loading &&
           Array.from({ length: 2 }).map((_, index) => (
-            <div
-              key={`loading-${index}`}
-              className="h-28 animate-pulse rounded-2xl border border-slate-800/60 bg-slate-950/40"
-            />
+            <SkeletonCard key={`loading-${index}`} className="h-28" />
           ))}
         {filteredProperties.map((property) => (
-          <div
+          <DataCard
             key={property.id}
-            className="rounded-2xl border border-slate-800/70 bg-slate-950/60 p-5"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <Link
-                href={`/properties/${property.id}`}
-                className="flex-1 transition hover:opacity-80"
+            title={property.name}
+            subtitle={`${property.addressLine1}, ${property.city}, ${property.state} ${property.postalCode}`}
+            icon={Building}
+            badge={
+              property.archivedAt ? (
+                <PropertyStatusBadge status="ARCHIVED" size="sm" />
+              ) : null
+            }
+            action={
+              <DataCardAction.Button
+                onClick={() => setArchiveModalProperty(property)}
+                disabled={archiveLoading}
               >
-                <h3 className="text-lg font-semibold text-slate-100">{property.name}</h3>
-                <p className="mt-2 text-sm text-slate-400">
-                  {property.addressLine1}, {property.city}, {property.state} {property.postalCode}
-                </p>
-                {(property.unitCount !== undefined || property.vacancyCount !== undefined) && (
-                  <p className="mt-2 text-xs text-slate-500">
-                    {property.unitCount ?? 0} unit{(property.unitCount ?? 0) !== 1 ? "s" : ""}
-                    {" · "}
-                    {property.vacancyCount ?? 0} vacant
-                  </p>
-                )}
-              </Link>
-              
-              <div className="flex shrink-0 items-center gap-2">
-                {property.archivedAt && (
-                  <span className="rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-300">
-                    Archived
-                  </span>
-                )}
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setArchiveModalProperty(property)}
-                  disabled={archiveLoading}
-                >
-                  {property.archivedAt ? "Unarchive" : "Archive"}
-                </Button>
-              </div>
-            </div>
-          </div>
+                {property.archivedAt ? "Unarchive" : "Archive"}
+              </DataCardAction.Button>
+            }
+            stats={
+              (property.unitCount !== undefined || property.vacancyCount !== undefined) ? [
+                {
+                  label: "Units",
+                  value: property.unitCount ?? 0,
+                },
+                {
+                  label: "Vacant",
+                  value: property.vacancyCount ?? 0,
+                  variant: property.vacancyCount && property.vacancyCount > 0 ? 'warning' : 'default',
+                },
+              ] : undefined
+            }
+            onClick={() => window.location.href = `/properties/${property.id}`}
+            variant="interactive"
+          />
         ))}
 
         {filteredProperties.length === 0 && !error && !loading && (
-          <div className="rounded-2xl border border-dashed border-slate-700/70 p-6 text-sm text-slate-400">
-            {showArchived 
-              ? "No archived properties. Archive properties to organize your portfolio."
-              : "No active properties yet. Add your first property to begin tracking units and tenants."
-            }
+          <div className="md:col-span-2">
+            <DataCard
+              title={showArchived ? "No archived properties" : "No active properties yet"}
+              description={
+                showArchived 
+                  ? "Archive properties to organize your portfolio."
+                  : "Add your first property to begin tracking units and tenants."
+              }
+              icon={Home}
+              variant="ghost"
+              action={
+                !showArchived ? (
+                  <Button asChild>
+                    <Link href="/properties/new">Add Property</Link>
+                  </Button>
+                ) : undefined
+              }
+            />
           </div>
         )}
       </div>

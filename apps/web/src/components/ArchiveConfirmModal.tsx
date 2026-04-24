@@ -40,11 +40,11 @@ export function ArchiveConfirmModal({
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
       onClick={onClose}
     >
       <div 
-        className="w-full max-w-md rounded-2xl border border-slate-700/70 bg-slate-900/90 p-6 shadow-2xl"
+        className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
@@ -55,8 +55,8 @@ export function ArchiveConfirmModal({
         </h4>
         
         <div className="mt-4 space-y-3">
-          <p className="text-sm text-slate-300">
-            <span className="font-semibold text-slate-100">{property.name}</span>
+          <p className="text-sm text-muted-foreground">
+            <span className="font-semibold text-foreground">{property.name}</span>
           </p>
 
           {isArchiving && (
@@ -70,9 +70,9 @@ export function ArchiveConfirmModal({
                   </p>
                 </div>
               ) : (
-                <div className="rounded-lg border border-slate-600/50 bg-slate-800/50 p-3 text-sm">
-                  <p className="font-semibold text-slate-200">Archive this property?</p>
-                  <p className="mt-1 text-slate-400">
+                <div className="rounded-lg border border-border bg-muted p-3 text-sm">
+                  <p className="font-semibold text-foreground">Archive this property?</p>
+                  <p className="mt-1 text-muted-foreground">
                     Archived properties are hidden from default listings but can be restored later.
                   </p>
                 </div>
@@ -81,9 +81,9 @@ export function ArchiveConfirmModal({
           )}
 
           {!isArchiving && (
-            <div className="rounded-lg border border-slate-600/50 bg-slate-800/50 p-3 text-sm">
-              <p className="font-semibold text-slate-200">Restore this property?</p>
-              <p className="mt-1 text-slate-400">
+            <div className="rounded-lg border border-border bg-muted p-3 text-sm">
+              <p className="font-semibold text-foreground">Restore this property?</p>
+              <p className="mt-1 text-muted-foreground">
                 This property will be restored to your active property list.
               </p>
             </div>
