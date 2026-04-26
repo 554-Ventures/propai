@@ -1,4 +1,5 @@
-import { Router } from "express";
+import { Router, type Response as ExpressResponse } from "express";
+import { type Prisma } from "@prisma/client";
 import prisma from "../lib/prisma.js";
 import { asyncHandler } from "../utils/async-handler.js";
 import { getAgentOpenAIModel, getOpenAIClient } from "../lib/openai.js";
@@ -26,12 +27,25 @@ import {
   validateAgent2WriteCall
 } from "../lib/ai/agent2-tools.js";
 import type { AiActionPlan, AiPlannedToolCall } from "../lib/ai/action-tools.js";
-import type { ResponseFunctionToolCall } from "openai/resources/responses/responses";
+import type {
+  Response as OpenAIResponse,
+  ResponseCreateParamsBase,
+  ResponseFunctionToolCall,
+  ResponseInput,
+  ResponseStreamEvent,
+  Tool
+} from "openai/resources/responses/responses";
 
 const router: Router = Router();
 const CONTRACT_VERSION = "2026-04-25.agent2.v1";
+const STREAM_GUARD_TRAILING_CHARS = 80;
 
-const writeEvent = (res: any, event: string, data: unknown) => {
+type AgentResponseStreamParams = Omit<ResponseCreateParamsBase, "stream"> & { stream?: true };
+type StoredActionPayload = Record<string, unknown> & { plan?: AiActionPlan };
+
+const asJson = (value: unknown): Prisma.InputJsonValue => value as Prisma.InputJsonValue;
+
+const writeEvent = (res: ExpressResponse, event: string, data: unknown) => {
   res.write(`event: ${event}\n`);
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 };
@@ -67,7 +81,7 @@ const getRecentInput = async (opts: {
   organizationId: string;
   userId: string;
   userContext: string;
-}) => {
+}): Promise<ResponseInput> => {
   const session = await prisma.chatSession.findFirst({
     where: { id: opts.sessionId, organizationId: opts.organizationId, userId: opts.userId },
     select: { summary: true }
@@ -105,11 +119,54 @@ const getRecentInput = async (opts: {
   ];
 };
 
-const streamText = (res: any, text: string) => {
-  const chunks = text.match(/.{1,80}(?:\s|$)/g) ?? [text];
-  for (const chunk of chunks) {
-    writeEvent(res, "message_delta", { text: chunk });
+const findFlushLength = (text: string) => {
+  const maxFlushLength = text.length - STREAM_GUARD_TRAILING_CHARS;
+  if (maxFlushLength <= 0) return 0;
+  const boundary = text.slice(0, maxFlushLength).search(/\s\S*$/);
+  return boundary > 0 ? boundary : maxFlushLength;
+};
+
+const createAgentResponse = async (opts: {
+  client: ReturnType<typeof getOpenAIClient>;
+  params: AgentResponseStreamParams;
+  res: ExpressResponse;
+  streamTextDeltas?: boolean;
+}) => {
+  let emittedText = "";
+  let pendingText = "";
+  let blockedReason: string | null = null;
+
+  const flushPending = (force = false) => {
+    if (!opts.streamTextDeltas || blockedReason || !pendingText) return;
+
+    const filtered = filterAiOutput(`${emittedText}${pendingText}`);
+    if (!filtered.allowed) {
+      blockedReason = filtered.reason ?? "output_filter";
+      pendingText = "";
+      return;
+    }
+
+    const flushLength = force ? pendingText.length : findFlushLength(pendingText);
+    if (flushLength <= 0) return;
+
+    const nextText = pendingText.slice(0, flushLength);
+    pendingText = pendingText.slice(flushLength);
+    emittedText += nextText;
+    writeEvent(opts.res, "message_delta", { text: nextText });
+  };
+
+  const stream = opts.client.responses.stream(opts.params);
+  for await (const event of stream as AsyncIterable<ResponseStreamEvent>) {
+    if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
+      pendingText += event.delta;
+      flushPending(false);
+    }
   }
+
+  const response = await stream.finalResponse();
+  flushPending(true);
+
+  return { response, streamedText: emittedText, blockedReason };
 };
 
 const safeOutput = async (opts: { text: string; userId: string; organizationId: string; sessionId: string }) => {
@@ -218,7 +275,7 @@ router.post(
           return;
         }
 
-        const payload = existing.payload as any;
+        const payload = existing.payload as StoredActionPayload;
         const plan = payload?.plan as AiActionPlan | undefined;
         const first = plan?.toolCalls?.[0];
         if (!first) throw new Error("Pending action has no tool call");
@@ -235,7 +292,7 @@ router.post(
         const missing = getMissingAgent2Fields(publicName, first.args ?? {});
         plan.summary = buildAgent2DraftSummary(publicName, first.args ?? {});
 
-        await prisma.aiActionLog.update({ where: { id: existing.id }, data: { payload: { ...payload, plan } as any } });
+        await prisma.aiActionLog.update({ where: { id: existing.id }, data: { payload: asJson({ ...payload, plan }) } });
         if (missing.length > 0) {
           writeEvent(res, "clarify", {
             contractVersion: CONTRACT_VERSION,
@@ -268,13 +325,21 @@ router.post(
       const client = getOpenAIClient();
       const model = getAgentOpenAIModel();
       const input = await getRecentInput({ sessionId: session.id, organizationId, userId, userContext: context.content });
-      let response: any = await client.responses.create({
-        model,
-        input: input as any,
-        tools: agent2ToolDefinitions as any,
-        temperature: 0.2,
-        user: userId
+      let streamResult = await createAgentResponse({
+        client,
+        res,
+        streamTextDeltas: true,
+        params: {
+          model,
+          input,
+          tools: agent2ToolDefinitions as unknown as Tool[],
+          temperature: 0.2,
+          user: userId
+        }
       });
+      let response: OpenAIResponse = streamResult.response;
+      let streamedText = streamResult.streamedText;
+      let streamBlockedReason = streamResult.blockedReason;
       let usage = mergeUsage(emptyUsage(), extractUsage(response));
       const toolCallLogs: Array<{ toolName: string; inputs: Record<string, unknown>; outputs: unknown; status: "success" | "error" }> = [];
 
@@ -300,7 +365,7 @@ router.post(
               organizationId,
               actionType: writeCall.name,
               status: "PENDING",
-              payload: { message, plan, publicToolName: writeCall.name, contractVersion: CONTRACT_VERSION } as any
+              payload: asJson({ message, plan, publicToolName: writeCall.name, contractVersion: CONTRACT_VERSION })
             }
           });
           const eventPayload = {
@@ -319,7 +384,7 @@ router.post(
               sessionId: session.id,
               role: "assistant",
               content: eventPayload.summary,
-              metadata: { aiDraft: { planId: created.id, kind: writeCall.name, summary: eventPayload.summary, fields: args, toolCalls: plan.toolCalls } } as any
+              metadata: asJson({ aiDraft: { planId: created.id, kind: writeCall.name, summary: eventPayload.summary, fields: args, toolCalls: plan.toolCalls } })
             }
           });
           writeEvent(res, "done", { sessionId: session.id });
@@ -358,13 +423,21 @@ router.post(
           }
         }
 
-        response = await client.responses.create({
-          model,
-          input: toolOutputs,
-          previous_response_id: response.id,
-          temperature: 0.2,
-          user: userId
+        streamResult = await createAgentResponse({
+          client,
+          res,
+          streamTextDeltas: true,
+          params: {
+            model,
+            input: toolOutputs,
+            previous_response_id: response.id,
+            temperature: 0.2,
+            user: userId
+          }
         });
+        response = streamResult.response;
+        streamedText += streamResult.streamedText;
+        streamBlockedReason = streamBlockedReason ?? streamResult.blockedReason;
         usage = mergeUsage(usage, extractUsage(response));
       }
 
@@ -374,14 +447,18 @@ router.post(
         organizationId,
         sessionId: session.id
       });
-      streamText(res, checked.text);
+      if (streamBlockedReason || checked.blockedReason) {
+        writeEvent(res, "error", { error: "Response blocked by safety filters" });
+      } else if (!streamedText && checked.text) {
+        writeEvent(res, "message_delta", { text: checked.text });
+      }
 
       const assistantMessage = await prisma.chatMessage.create({
         data: {
           sessionId: session.id,
           role: "assistant",
           content: checked.text,
-          metadata: { toolCalls: toolCallLogs as any, context: { used: Boolean(context.content), generatedAt: context.generatedAt, stale: context.stale } } as any
+          metadata: asJson({ toolCalls: toolCallLogs, context: { used: Boolean(context.content), generatedAt: context.generatedAt, stale: context.stale } })
         }
       });
       if (toolCallLogs.length > 0) {
@@ -389,8 +466,8 @@ router.post(
           data: toolCallLogs.map((log) => ({
             messageId: assistantMessage.id,
             toolName: log.toolName,
-            inputs: log.inputs as any,
-            outputs: log.outputs as any,
+            inputs: asJson(log.inputs),
+            outputs: asJson(log.outputs),
             status: log.status
           }))
         });
@@ -456,7 +533,7 @@ router.post(
       return;
     }
 
-    const payload = action.payload as any;
+    const payload = action.payload as StoredActionPayload;
     const plan = payload?.plan as AiActionPlan | undefined;
     if (!plan || !Array.isArray(plan.toolCalls) || plan.toolCalls.length === 0) {
       res.status(409).json({ error: "Pending action is not executable" });
@@ -477,9 +554,9 @@ router.post(
         result.push({ toolName: publicName, output });
       }
       await prisma.aiActionExecution.create({
-        data: { organizationId, userId, actionId: id, clientRequestId: requestId, status: "CONFIRMED", result: result as any }
+        data: { organizationId, userId, actionId: id, clientRequestId: requestId, status: "CONFIRMED", result: asJson(result) }
       });
-      await prisma.aiActionLog.update({ where: { id }, data: { status: "CONFIRMED", result: result as any } });
+      await prisma.aiActionLog.update({ where: { id }, data: { status: "CONFIRMED", result: asJson(result) } });
       refreshUserContextSoon({ organizationId, userId });
       res.json({ contractVersion: CONTRACT_VERSION, mode: "result", pendingActionId: null, result });
     } catch (error) {
