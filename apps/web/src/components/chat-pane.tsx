@@ -756,7 +756,9 @@ export default function ChatPane() {
           <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
             <div
               className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
-                msg.role === "user" ? "bg-primary/20 text-primary-foreground" : "bg-muted text-foreground"
+                msg.role === "user"
+                  ? "border border-primary/30 bg-primary/15 text-foreground"
+                  : "bg-muted text-foreground"
               }`}
             >
               {msg.role === "assistant" && msg.metadata?.aiDraft ? (
