@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import { API_URL, apiFetch } from "../lib/api";
 import { getStoredToken } from "../lib/auth";
 import { Button } from "./ui/button";
+import { Textarea } from "./ui/atoms/input";
 import { CHAT_SEND_EVENT } from "../lib/chat-events";
 
 const STORAGE_KEY = "propai_chat_session_id";
@@ -152,6 +153,14 @@ const formatTime = (value: string) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+
+const savedReceiptDetail = (toolName?: string) => {
+  if (toolName === "create_property" || toolName === "createProperty") return "Property created successfully.";
+  if (toolName === "create_tenant" || toolName === "createTenant") return "Tenant created successfully.";
+  if (toolName === "log_payment" || toolName === "createCashflowTransaction") return "Payment logged successfully.";
+  if (toolName === "createMaintenanceRequest") return "Maintenance request created successfully.";
+  return "Your changes were saved successfully.";
 };
 
 export default function ChatPane() {
@@ -553,9 +562,9 @@ export default function ChatPane() {
       const createdId = output?.id ? String(output.id) : undefined;
 
       const href =
-        toolName === "createProperty" && createdId
+        (toolName === "create_property" || toolName === "createProperty") && createdId
           ? `/properties/${createdId}`
-          : toolName === "createTenant" && createdId
+          : (toolName === "create_tenant" || toolName === "createTenant") && createdId
             ? `/tenants/${createdId}`
             : toolName === "createMaintenanceRequest" && createdId
               ? `/properties/${output?.propertyId || createdId}`
@@ -573,9 +582,7 @@ export default function ChatPane() {
               aiReceipt: {
                 title: "Saved",
                 href,
-                detail: toolName
-                  ? `Confirmed ${toolName}${createdId ? ` (id=${createdId})` : ""}`
-                  : "Confirmed"
+                detail: savedReceiptDetail(toolName)
               }
             }
           };
@@ -586,7 +593,12 @@ export default function ChatPane() {
 
       // Best-effort: notify rest of app to refresh data.
       if (typeof window !== "undefined") {
-        const kind = toolName === "createCashflowTransaction" ? "cashflow" : toolName === "createProperty" ? "properties" : "records";
+        const kind =
+          toolName === "log_payment" || toolName === "createCashflowTransaction"
+            ? "cashflow"
+            : toolName === "create_property" || toolName === "createProperty"
+              ? "properties"
+              : "records";
         window.dispatchEvent(new CustomEvent("propai:data:changed", { detail: { kind } }));
       }
     } catch (err) {
@@ -658,9 +670,6 @@ export default function ChatPane() {
             >
               History
             </button>
-            {activeSessionId ? (
-              <span className="text-[11px] text-muted-foreground">Session {activeSessionId.slice(0, 6)}…</span>
-            ) : null}
           </div>
           <div className="flex items-center gap-2">
             <Button variant="secondary" onClick={startNewChat} disabled={loading}>
@@ -916,8 +925,8 @@ export default function ChatPane() {
       )}
 
       <div className="border-t border-border px-4 py-3">
-        <div className="flex items-center gap-2">
-          <textarea
+        <div className="flex items-end gap-2">
+          <Textarea
             ref={inputRef}
             value={input}
             onChange={(event) => setInput(event.target.value)}
@@ -929,11 +938,11 @@ export default function ChatPane() {
             }}
             placeholder={
               pendingActionId
-                ? "Continue this action (reply in plain text or JSON)…"
-                : "Ask about rent, properties, expenses..."
+                ? "Add missing details. Enter to send, Shift+Enter for a new line."
+                : "Ask about rent, properties, or expenses. Enter to send, Shift+Enter for a new line."
             }
-            rows={1}
-            className="flex-1 resize-none rounded-2xl border border-border bg-input px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/70 focus:outline-none"
+            rows={3}
+            className="max-h-60 min-h-24 flex-1 resize-y rounded-2xl border-border bg-input px-3 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/70 focus:outline-none"
             disabled={loading}
           />
           {pendingActionId ? (
@@ -946,7 +955,7 @@ export default function ChatPane() {
           </Button>
         </div>
         {pendingActionId ? (
-          <p className="mt-2 text-[11px] text-muted-foreground">Continuing pending action {pendingActionId.slice(0, 6)}…</p>
+          <p className="mt-2 text-[11px] text-muted-foreground">Continuing the pending action.</p>
         ) : null}
       </div>
     </div>
